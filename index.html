@@ -29,6 +29,7 @@
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft JhengHei", "PingFang TC", Roboto, Helvetica, Arial, sans-serif;
     color: var(--text);
+    font-size: 15px;
   }
 
   /* ---- 登入畫面 ---- */
@@ -105,7 +106,7 @@
     flex-wrap: wrap;
     gap: 10px;
   }
-  header.top h1 { font-size: 17px; margin: 0; font-weight: 700; }
+  header.top h1 { font-size: 19px; margin: 0; font-weight: 700; }
   header.top .user-info { font-size: 12.5px; color: #b8c2d9; display: flex; align-items: center; gap: 14px; }
   header.top .user-info button {
     background: none; border: 1px solid #3a4a6b; color: #cbd5e1;
@@ -113,15 +114,15 @@
   }
   header.top .user-info button:hover { background: #1a2947; }
 
-  .container { max-width: 1180px; margin: 0 auto; padding: 22px 20px 60px; }
+  .container { max-width: 1440px; margin: 0 auto; padding: 22px 28px 60px; }
 
   .range-tabs { display: flex; gap: 6px; margin-bottom: 20px; flex-wrap: wrap; }
   .range-tabs button {
-    padding: 7px 16px;
+    padding: 8px 18px;
     border-radius: 999px;
     border: 1px solid var(--border);
     background: #fff;
-    font-size: 13px;
+    font-size: 14px;
     cursor: pointer;
     color: var(--muted);
     font-family: inherit;
@@ -136,7 +137,7 @@
     padding: 16px 18px;
   }
   .summary-card .label { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
-  .summary-card .value { font-size: 24px; font-weight: 700; color: var(--navy); }
+  .summary-card .value { font-size: 27px; font-weight: 700; color: var(--navy); }
   .summary-card .value.cost { color: var(--amber); }
 
   section.panel {
@@ -147,25 +148,25 @@
     overflow: hidden;
   }
   section.panel h2 {
-    font-size: 14.5px;
+    font-size: 16px;
     margin: 0;
-    padding: 14px 18px;
+    padding: 15px 20px;
     border-bottom: 1px solid var(--border);
     color: var(--navy);
   }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
   table th {
     text-align: left;
-    padding: 9px 18px;
+    padding: 10px 20px;
     background: #f8fafc;
     color: var(--muted);
     font-weight: 600;
-    font-size: 12px;
+    font-size: 13px;
     border-bottom: 1px solid var(--border);
     white-space: nowrap;
   }
   table td {
-    padding: 9px 18px;
+    padding: 10px 20px;
     border-bottom: 1px solid #f1f5f9;
     white-space: nowrap;
   }
@@ -338,8 +339,8 @@
   </header>
 
   <div class="main-tabs" id="main-tabs">
-    <button data-tab="ai-systems" class="active">AI系統用量</button>
-    <button data-tab="manual-import">各部門月報表（Excel匯入）</button>
+    <button data-tab="ai-systems" class="active">大量雲端系統統計</button>
+    <button data-tab="manual-import">集團各公司統計</button>
   </div>
 
   <div class="container">
