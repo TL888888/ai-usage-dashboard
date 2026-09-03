@@ -458,6 +458,7 @@
           <table id="manual-summary-table">
             <thead>
               <tr>
+                <th class="num">排名</th>
                 <th>公司</th>
                 <th>部門</th>
                 <th class="num">回報人數</th>
@@ -1069,14 +1070,16 @@ function renderManualTables(rows) {
 
   const summaryTbody = document.querySelector('#manual-summary-table tbody');
   const emptyNote = document.getElementById('manual-empty-note');
-  const groupList = Object.values(groups);
+  // 依部門token小計由高到低排序，做出排名
+  const groupList = Object.values(groups).sort((a, b) => b.sum - a.sum);
   if (groupList.length === 0) {
     summaryTbody.innerHTML = '';
     emptyNote.style.display = 'block';
   } else {
     emptyNote.style.display = 'none';
-    summaryTbody.innerHTML = groupList.map(g => `
+    summaryTbody.innerHTML = groupList.map((g, i) => `
       <tr>
+        <td class="num">${i + 1}</td>
         <td>${escapeHtml(g.company)}</td>
         <td>${escapeHtml(g.department)}</td>
         <td class="num">${fmtInt(g.count)}</td>
