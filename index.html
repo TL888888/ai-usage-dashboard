@@ -687,7 +687,7 @@ function renderSystemTable() {
     groups[key].cost += Number(e.estimated_cost_usd || 0);
     if (e.cache_hit) groups[key].cacheHits++;
   });
-  const rows = Object.entries(groups).sort((a, b) => b[1].cost - a[1].cost);
+  const rows = Object.entries(groups).sort((a, b) => b[1].tokens - a[1].tokens);
   const tbody = document.querySelector('#system-table tbody');
   const emptyNote = document.querySelector('#system-table').parentElement.nextElementSibling;
   if (rows.length === 0) {
@@ -716,7 +716,7 @@ function renderAskerTable() {
     groups[key].tokens += e.total_tokens || 0;
     groups[key].cost += Number(e.estimated_cost_usd || 0);
   });
-  const rows = Object.entries(groups).sort((a, b) => b[1].count - a[1].count);
+  const rows = Object.entries(groups).sort((a, b) => b[1].tokens - a[1].tokens);
   const tbody = document.querySelector('#asker-table tbody');
   const emptyNote = document.querySelector('#asker-table').parentElement.nextElementSibling;
   if (rows.length === 0) {
