@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>AI用量統計</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.108.2/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root {
     --navy: #0f1b33;
@@ -191,10 +192,89 @@
   .table-scroll { overflow-x: auto; }
   .system-name-cell { font-weight: 600; color: var(--navy); }
 
+  /* ---- 主分頁 (AI系統用量 / 各部門月報表) ---- */
+  .main-tabs { display: flex; gap: 4px; padding: 0 24px; background: var(--navy); }
+  .main-tabs button {
+    padding: 12px 16px;
+    background: none;
+    border: none;
+    color: #9fb0cc;
+    font-size: 13.5px;
+    cursor: pointer;
+    font-family: inherit;
+    border-bottom: 2px solid transparent;
+  }
+  .main-tabs button.active { color: #fff; border-bottom-color: var(--blue); font-weight: 600; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* ---- 日期篩選延伸（整月／自訂區間） ---- */
+  .range-extra { display: flex; align-items: center; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+  .range-extra input[type="month"], .range-extra input[type="date"] {
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    font-size: 13px;
+    font-family: inherit;
+  }
+  .range-extra .btn-mini {
+    padding: 7px 14px;
+    border-radius: 7px;
+    border: none;
+    background: var(--blue);
+    color: #fff;
+    font-size: 13px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .range-extra .btn-mini:hover { background: var(--blue-dark); }
+
+  /* ---- Excel匯入 ---- */
+  .import-box {
+    padding: 18px;
+  }
+  .import-box .drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: 10px;
+    padding: 28px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 13.5px;
+    cursor: pointer;
+    background: #fafbfc;
+  }
+  .import-box .drop-zone:hover { border-color: var(--blue); background: #f5f8ff; }
+  .import-box .drop-zone.dragover { border-color: var(--blue); background: #eef4ff; }
+  .import-note { font-size: 12.5px; color: var(--muted); margin: 10px 0 0; line-height: 1.7; }
+  .import-warning {
+    background: #fffbeb;
+    color: #92400e;
+    font-size: 12.5px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    margin-top: 12px;
+    display: none;
+    line-height: 1.7;
+  }
+  .import-summary {
+    display: none;
+    margin-top: 16px;
+  }
+  .import-summary .btn-primary { width: auto; padding: 9px 22px; margin-top: 12px; }
+  .month-picker-row { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; }
+  .month-picker-row select, .month-picker-row input[type="month"] {
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    font-size: 13px;
+    font-family: inherit;
+  }
+
   @media (max-width: 640px) {
     .container { padding: 16px 12px 40px; }
     header.top { padding: 14px 16px; }
     table th, table td { padding: 8px 10px; }
+    .main-tabs { padding: 0 12px; overflow-x: auto; }
   }
 </style>
 </head>
@@ -226,73 +306,173 @@
     </div>
   </header>
 
+  <div class="main-tabs" id="main-tabs">
+    <button data-tab="ai-systems" class="active">AI系統用量</button>
+    <button data-tab="manual-import">各部門月報表（Excel匯入）</button>
+  </div>
+
   <div class="container">
-    <div class="range-tabs" id="range-tabs">
-      <button data-range="today">今天</button>
-      <button data-range="7" class="active">近7天</button>
-      <button data-range="30">近30天</button>
-      <button data-range="all">全部</button>
+
+    <div class="tab-panel active" id="tab-ai-systems">
+      <div class="range-tabs" id="range-tabs">
+        <button data-range="today">今天</button>
+        <button data-range="7" class="active">近7天</button>
+        <button data-range="30">近30天</button>
+        <button data-range="all">全部</button>
+        <button data-range="month">指定月份</button>
+        <button data-range="custom">自訂區間</button>
+      </div>
+
+      <div class="range-extra" id="range-extra-month" style="display:none;">
+        <input type="month" id="range-month-input" />
+        <button class="btn-mini" onclick="applyMonthRange()">查詢這個月</button>
+      </div>
+      <div class="range-extra" id="range-extra-custom" style="display:none;">
+        <input type="date" id="range-start-input" />
+        <span style="color:var(--muted);font-size:13px;">至</span>
+        <input type="date" id="range-end-input" />
+        <button class="btn-mini" onclick="applyCustomRange()">查詢</button>
+      </div>
+
+      <div class="summary-row" id="summary-row"></div>
+
+      <section class="panel">
+        <h2>各系統用量比較</h2>
+        <div class="table-scroll">
+          <table id="system-table">
+            <thead>
+              <tr>
+                <th>系統</th>
+                <th class="num">問答次數</th>
+                <th class="num">總Token</th>
+                <th class="num">估計花費 (USD)</th>
+                <th class="num">快取命中</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="empty-note" style="display:none;">這段期間沒有任何用量紀錄</div>
+      </section>
+
+      <section class="panel">
+        <h2>提問者排行</h2>
+        <div class="table-scroll">
+          <table id="asker-table">
+            <thead>
+              <tr>
+                <th>提問者</th>
+                <th class="num">問答次數</th>
+                <th class="num">總Token</th>
+                <th class="num">估計花費 (USD)</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="empty-note" style="display:none;">這段期間沒有任何用量紀錄</div>
+      </section>
+
+      <section class="panel">
+        <h2>最近紀錄（最多顯示100筆）</h2>
+        <div class="table-scroll">
+          <table id="recent-table">
+            <thead>
+              <tr>
+                <th>時間</th>
+                <th>系統</th>
+                <th>提問者</th>
+                <th class="num">輸入Token</th>
+                <th class="num">輸出Token</th>
+                <th class="num">花費 (USD)</th>
+                <th>備註</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="empty-note" style="display:none;">這段期間沒有任何用量紀錄</div>
+      </section>
     </div>
 
-    <div class="summary-row" id="summary-row"></div>
+    <div class="tab-panel" id="tab-manual-import">
+      <section class="panel">
+        <h2>上傳月報表 Excel</h2>
+        <div class="import-box">
+          <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click();">
+            📄 點擊選擇檔案，或把 Excel 檔拖曳到這裡<br />
+            <span style="font-size:12px;">支援多分頁（每個分頁代表一個公司），格式需跟既有範本一致</span>
+          </div>
+          <input type="file" id="file-input" accept=".xlsx,.xls" style="display:none;" onchange="handleFileSelect(event)" />
+          <p class="import-note">
+            解析規則：以「統計月份／公司／部門／姓名／使用AI名稱／方案／使用API名稱／本月token用量／導入工作應用／備註」為欄位對應；<br />
+            token用量支援 1.3B／912M／60K 這種縮寫格式，會自動換算成實際數字；<b>部門小計一律由系統自動加總同部門所有人的數字，不需要你自己先用計算機算好填進Excel</b>（如果Excel裡剛好也有填小計、且跟系統算出來的對不上，畫面上會提醒你）。
+          </p>
+          <div class="import-warning" id="import-warning"></div>
+          <div class="import-summary" id="import-summary">
+            <div class="table-scroll">
+              <table id="preview-table">
+                <thead>
+                  <tr>
+                    <th>公司</th>
+                    <th>部門</th>
+                    <th>月份</th>
+                    <th class="num">人數</th>
+                    <th class="num">部門token小計</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <button class="btn-primary" id="confirm-import-btn" onclick="confirmImport()">確認匯入</button>
+          </div>
+        </div>
+      </section>
 
-    <section class="panel">
-      <h2>各系統用量比較</h2>
-      <div class="table-scroll">
-        <table id="system-table">
-          <thead>
-            <tr>
-              <th>系統</th>
-              <th class="num">問答次數</th>
-              <th class="num">總Token</th>
-              <th class="num">估計花費 (USD)</th>
-              <th class="num">快取命中</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-      <div class="empty-note" style="display:none;">這段期間沒有任何用量紀錄</div>
-    </section>
+      <section class="panel">
+        <h2>月報表總覽</h2>
+        <div class="month-picker-row">
+          <label style="font-size:13px;color:var(--muted);">查看月份：</label>
+          <input type="month" id="manual-month-picker" />
+          <button class="btn-mini" onclick="loadManualMonth()">查詢</button>
+        </div>
+        <div class="table-scroll">
+          <table id="manual-summary-table">
+            <thead>
+              <tr>
+                <th>公司</th>
+                <th>部門</th>
+                <th class="num">回報人數</th>
+                <th class="num">部門token小計</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="empty-note" id="manual-empty-note" style="display:none;">這個月份還沒有匯入資料</div>
+      </section>
 
-    <section class="panel">
-      <h2>提問者排行</h2>
-      <div class="table-scroll">
-        <table id="asker-table">
-          <thead>
-            <tr>
-              <th>提問者</th>
-              <th class="num">問答次數</th>
-              <th class="num">總Token</th>
-              <th class="num">估計花費 (USD)</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-      <div class="empty-note" style="display:none;">這段期間沒有任何用量紀錄</div>
-    </section>
+      <section class="panel">
+        <h2>明細（依公司/部門/姓名）</h2>
+        <div class="table-scroll">
+          <table id="manual-detail-table">
+            <thead>
+              <tr>
+                <th>公司</th>
+                <th>部門</th>
+                <th>姓名</th>
+                <th>使用AI名稱</th>
+                <th>方案</th>
+                <th class="num">Token用量</th>
+                <th>導入工作應用</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
 
-    <section class="panel">
-      <h2>最近紀錄（最多顯示100筆）</h2>
-      <div class="table-scroll">
-        <table id="recent-table">
-          <thead>
-            <tr>
-              <th>時間</th>
-              <th>系統</th>
-              <th>提問者</th>
-              <th class="num">輸入Token</th>
-              <th class="num">輸出Token</th>
-              <th class="num">花費 (USD)</th>
-              <th>備註</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-      <div class="empty-note" style="display:none;">這段期間沒有任何用量紀錄</div>
-    </section>
   </div>
 </div>
 
@@ -367,10 +547,46 @@ function rangeStartISO(range) {
   return start.toISOString();
 }
 
+// 目前查詢區間的起訖時間（給「今天/7天/30天/全部」用 start~現在；
+// 「指定月份」「自訂區間」則額外指定 end）
+let currentRangeEndISO = null;
+let currentRangeStartISO = null;
+
+function applyMonthRange() {
+  const val = document.getElementById('range-month-input').value; // 格式 "2026-08"
+  if (!val) return;
+  const [y, m] = val.split('-').map(Number);
+  const start = new Date(y, m - 1, 1);
+  const end = new Date(y, m, 1); // 下個月1號，當作不含的結束邊界
+  currentRangeStartISO = start.toISOString();
+  currentRangeEndISO = end.toISOString();
+  loadData();
+}
+
+function applyCustomRange() {
+  const startVal = document.getElementById('range-start-input').value;
+  const endVal = document.getElementById('range-end-input').value;
+  if (!startVal || !endVal) { alert('請選擇起訖日期'); return; }
+  const start = new Date(startVal + 'T00:00:00');
+  const end = new Date(endVal + 'T00:00:00');
+  end.setDate(end.getDate() + 1); // 讓結束日當天也算在內
+  currentRangeStartISO = start.toISOString();
+  currentRangeEndISO = end.toISOString();
+  loadData();
+}
+
 async function loadData() {
-  const start = rangeStartISO(currentRange);
+  let start, end;
+  if (currentRange === 'month' || currentRange === 'custom') {
+    start = currentRangeStartISO;
+    end = currentRangeEndISO;
+  } else {
+    start = rangeStartISO(currentRange);
+    end = null;
+  }
   let query = sb.from('ai_usage_events').select('*').order('created_at', { ascending: false }).limit(2000);
   if (start) query = query.gte('created_at', start);
+  if (end) query = query.lt('created_at', end);
   const { data, error } = await query;
   if (error) {
     console.error('查詢失敗:', error);
@@ -497,8 +713,333 @@ document.getElementById('range-tabs').addEventListener('click', (e) => {
   document.querySelectorAll('#range-tabs button').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   currentRange = btn.dataset.range;
-  loadData();
+  document.getElementById('range-extra-month').style.display = currentRange === 'month' ? 'flex' : 'none';
+  document.getElementById('range-extra-custom').style.display = currentRange === 'custom' ? 'flex' : 'none';
+  if (currentRange === 'month') {
+    const now = new Date();
+    document.getElementById('range-month-input').value = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+    applyMonthRange();
+  } else if (currentRange === 'custom') {
+    // 等使用者自己選日期按查詢，不主動查
+  } else {
+    loadData();
+  }
 });
+
+document.getElementById('main-tabs').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-tab]');
+  if (!btn) return;
+  document.querySelectorAll('#main-tabs button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  if (btn.dataset.tab === 'manual-import' && !document.getElementById('manual-month-picker').value) {
+    const now = new Date();
+    document.getElementById('manual-month-picker').value = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+    loadManualMonth();
+  }
+});
+
+// ══════════════════════════════════════════════════════════
+// 各部門月報表：Excel 匯入
+// ══════════════════════════════════════════════════════════
+let parsedManualRows = [];   // 逐人明細
+let parsedDeptTotals = [];   // Excel自己填的部門小計（只用來跟系統自動加總的結果比對，抓有沒有落差）
+
+// 把 "1.3B" "912M" "60K" "935.4K" 或純數字，轉成實際token數字；解析不出來回傳 null
+function parseTokenAmount(raw) {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw === 'number') return Math.round(raw);
+  const s = String(raw).trim();
+  if (!s) return null;
+  const m = s.match(/^([\d.]+)\s*([KkMmBb])$/);
+  if (m) {
+    const num = parseFloat(m[1]);
+    if (isNaN(num)) return null;
+    const mult = { k: 1e3, m: 1e6, b: 1e9 }[m[2].toLowerCase()];
+    return Math.round(num * mult);
+  }
+  const plain = parseFloat(s.replace(/,/g, ''));
+  if (!isNaN(plain) && /^[\d.,]+$/.test(s)) return Math.round(plain);
+  return null;
+}
+
+// 把 Excel 儲存格的月份值（可能是 Date 物件、Excel序號、或 "2026/08" 這種字串）轉成該月1號的 "YYYY-MM-01"
+function parseReportMonth(raw) {
+  if (raw === null || raw === undefined) return null;
+  if (raw instanceof Date) {
+    return raw.getFullYear() + '-' + String(raw.getMonth() + 1).padStart(2, '0') + '-01';
+  }
+  if (typeof raw === 'number') {
+    // Excel 序號日期
+    const d = XLSX.SSF.parse_date_code(raw);
+    if (d) return d.y + '-' + String(d.m).padStart(2, '0') + '-01';
+    return null;
+  }
+  const s = String(raw).trim();
+  const m = s.match(/^(\d{4})[\/\-](\d{1,2})/);
+  if (m) return m[1] + '-' + m[2].padStart(2, '0') + '-01';
+  return null;
+}
+
+function findHeaderRowAndCols(sheetRows) {
+  for (let r = 0; r < sheetRows.length; r++) {
+    const row = sheetRows[r] || [];
+    const idx = row.findIndex(c => String(c || '').trim() === '統計月份');
+    if (idx !== -1) {
+      const cols = {};
+      row.forEach((cell, ci) => {
+        const t = String(cell || '').trim();
+        if (t === '統計月份') cols.month = ci;
+        else if (t === '公司') cols.company = ci;
+        else if (t === '部門') cols.department = ci;
+        else if (t === '姓名') cols.person = ci;
+        else if (t.startsWith('使用AI')) cols.tool = ci;
+        else if (t.startsWith('方案')) cols.plan = ci;
+        else if (t.startsWith('使用API')) cols.api = ci;
+        else if (t.startsWith('本月token用量')) cols.token = ci;
+        else if (t.startsWith('導入工作應用')) cols.usage = ci;
+        else if (t.startsWith('備註')) cols.remark = ci;
+      });
+      return { headerRow: r, cols };
+    }
+  }
+  return null;
+}
+
+function parseWorkbook(workbook) {
+  const rows = [];
+  const deptTotals = [];
+  const warnings = [];
+
+  workbook.SheetNames.forEach(sheetName => {
+    const ws = workbook.Sheets[sheetName];
+    const sheetRows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
+    const found = findHeaderRowAndCols(sheetRows);
+    if (!found || found.cols.department === undefined || found.cols.token === undefined) {
+      warnings.push(`分頁「${sheetName}」找不到標準表頭，已略過`);
+      return;
+    }
+    const { headerRow, cols } = found;
+    let currentDept = null, currentCompany = null, currentMonth = null;
+
+    for (let r = headerRow + 1; r < sheetRows.length; r++) {
+      const row = sheetRows[r] || [];
+      const apiCell = cols.api !== undefined ? row[cols.api] : null;
+      const isTotalRow = String(apiCell || '').includes('統計tokens');
+      const person = cols.person !== undefined ? row[cols.person] : null;
+      const dept = cols.department !== undefined ? row[cols.department] : null;
+      const company = cols.company !== undefined ? row[cols.company] : null;
+
+      if (isTotalRow) {
+        const totalRaw = row[cols.token];
+        const totalVal = parseTokenAmount(totalRaw);
+        if (currentDept && currentCompany) {
+          deptTotals.push({
+            company: String(currentCompany).trim(),
+            department: String(currentDept).trim(),
+            report_month: currentMonth,
+            token_amount: totalVal,
+            token_amount_raw: totalRaw != null ? String(totalRaw) : null,
+          });
+        }
+        currentDept = null;
+        continue;
+      }
+
+      if (!dept && !person) continue; // 空白列跳過
+
+      if (dept) currentDept = dept;
+      if (company) currentCompany = company;
+      const monthVal = cols.month !== undefined ? row[cols.month] : null;
+      const parsedMonth = parseReportMonth(monthVal);
+      if (parsedMonth) currentMonth = parsedMonth;
+
+      if (!currentCompany || !currentDept) continue;
+
+      rows.push({
+        report_month: currentMonth,
+        company: String(currentCompany).trim(),
+        department: String(currentDept).trim(),
+        person_name: person ? String(person).trim() : null,
+        ai_tool_name: cols.tool !== undefined && row[cols.tool] ? String(row[cols.tool]).trim() : null,
+        plan_type: cols.plan !== undefined && row[cols.plan] ? String(row[cols.plan]).trim() : null,
+        api_names: cols.api !== undefined && row[cols.api] ? String(row[cols.api]).trim() : null,
+        token_amount: cols.token !== undefined ? parseTokenAmount(row[cols.token]) : null,
+        token_amount_raw: cols.token !== undefined && row[cols.token] != null ? String(row[cols.token]) : null,
+        usage_note: cols.usage !== undefined && row[cols.usage] ? String(row[cols.usage]).trim() : null,
+        remark: cols.remark !== undefined && row[cols.remark] ? String(row[cols.remark]).trim() : null,
+      });
+    }
+  });
+
+  return { rows, deptTotals, warnings };
+}
+
+function handleFileSelect(event) {
+  const file = event.target.files[0];
+  if (file) processFile(file);
+}
+
+function processFile(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const data = new Uint8Array(e.target.result);
+    const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+    const { rows, deptTotals, warnings } = parseWorkbook(workbook);
+    parsedManualRows = rows;
+    parsedDeptTotals = deptTotals;
+    showImportPreview(rows, deptTotals, warnings);
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function showImportPreview(rows, deptTotals, warnings) {
+  const warnBox = document.getElementById('import-warning');
+  const msgs = warnings.slice();
+
+  // 依 公司+部門+月份 分組，一律用個人明細自動加總（不採用Excel自己填的小計數字）
+  const groups = {};
+  rows.forEach(r => {
+    const key = r.company + '|' + r.department + '|' + r.report_month;
+    if (!groups[key]) groups[key] = { company: r.company, department: r.department, report_month: r.report_month, count: 0, sum: 0 };
+    groups[key].count++;
+    groups[key].sum += r.token_amount || 0;
+  });
+
+  // 如果Excel自己也填了小計，且跟我們自動加總的數字差異超過1%，提醒一下（可能是漏填或重複計算）
+  deptTotals.forEach(t => {
+    const key = t.company + '|' + t.department + '|' + t.report_month;
+    if (groups[key] && t.token_amount != null && t.token_amount > 0) {
+      const diff = Math.abs(t.token_amount - groups[key].sum);
+      if (diff / t.token_amount > 0.01) {
+        msgs.push(`「${t.company} ${t.department}」Excel原填小計為 ${t.token_amount.toLocaleString('en-US')}，跟系統自動加總 ${groups[key].sum.toLocaleString('en-US')} 不一致，已採用自動加總的數字`);
+      }
+    }
+  });
+
+  if (msgs.length > 0) {
+    warnBox.innerHTML = msgs.map(escapeHtml).join('<br>');
+    warnBox.style.display = 'block';
+  } else {
+    warnBox.style.display = 'none';
+  }
+
+  const tbody = document.querySelector('#preview-table tbody');
+  tbody.innerHTML = Object.values(groups).map(g => `
+    <tr>
+      <td>${escapeHtml(g.company)}</td>
+      <td>${escapeHtml(g.department)}</td>
+      <td>${escapeHtml(g.report_month || '未知')}</td>
+      <td class="num">${fmtInt(g.count)}</td>
+      <td class="num">${fmtInt(g.sum)}</td>
+    </tr>
+  `).join('');
+
+  document.getElementById('import-summary').style.display = 'block';
+}
+
+async function confirmImport() {
+  const btn = document.getElementById('confirm-import-btn');
+  btn.disabled = true;
+  btn.textContent = '匯入中...';
+
+  // 先刪掉本次涉及到的 (company, report_month) 組合的舊資料，避免重複匯入
+  const combos = new Set(parsedManualRows.map(r => r.company + '|' + r.report_month));
+  for (const combo of combos) {
+    const [company, month] = combo.split('|');
+    if (!month) continue;
+    await sb.from('manual_ai_usage_monthly').delete().eq('company', company).eq('report_month', month);
+  }
+
+  // 只存逐人明細；部門小計一律由系統在畫面上即時加總算出，不另外存一筆小計資料，
+  // 避免以後有人改了個人數字、卻忘記同步改小計，兩邊對不起來
+  const toInsert = parsedManualRows.map(r => ({ ...r, imported_by: null }));
+
+  const { data: { session } } = await sb.auth.getSession();
+  toInsert.forEach(r => { r.imported_by = session ? session.user.email : null; });
+
+  const { error } = await sb.from('manual_ai_usage_monthly').insert(toInsert);
+  btn.disabled = false;
+  btn.textContent = '確認匯入';
+  if (error) {
+    alert('匯入失敗：' + error.message);
+    return;
+  }
+  alert('匯入成功，共 ' + toInsert.length + ' 筆');
+  document.getElementById('import-summary').style.display = 'none';
+  document.getElementById('file-input').value = '';
+  loadManualMonth();
+}
+
+// 拖曳上傳
+const dropZone = document.getElementById('drop-zone');
+dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file) processFile(file);
+});
+
+// ══════════════════════════════════════════════════════════
+// 各部門月報表：查看已匯入資料
+// ══════════════════════════════════════════════════════════
+async function loadManualMonth() {
+  const val = document.getElementById('manual-month-picker').value;
+  if (!val) return;
+  const reportMonth = val + '-01';
+  const { data, error } = await sb.from('manual_ai_usage_monthly').select('*').eq('report_month', reportMonth);
+  if (error) {
+    console.error('查詢失敗:', error);
+    renderManualTables([]);
+    return;
+  }
+  renderManualTables(data || []);
+}
+
+function renderManualTables(rows) {
+  // 一律用個人明細自動加總部門小計（不再依賴另存的小計列）
+  const groups = {};
+  rows.forEach(r => {
+    const key = r.company + '|' + r.department;
+    if (!groups[key]) groups[key] = { company: r.company, department: r.department, count: 0, sum: 0 };
+    groups[key].count++;
+    groups[key].sum += r.token_amount || 0;
+  });
+
+  const summaryTbody = document.querySelector('#manual-summary-table tbody');
+  const emptyNote = document.getElementById('manual-empty-note');
+  const groupList = Object.values(groups);
+  if (groupList.length === 0) {
+    summaryTbody.innerHTML = '';
+    emptyNote.style.display = 'block';
+  } else {
+    emptyNote.style.display = 'none';
+    summaryTbody.innerHTML = groupList.map(g => `
+      <tr>
+        <td>${escapeHtml(g.company)}</td>
+        <td>${escapeHtml(g.department)}</td>
+        <td class="num">${fmtInt(g.count)}</td>
+        <td class="num">${fmtInt(g.sum)}</td>
+      </tr>
+    `).join('');
+  }
+
+  const detailTbody = document.querySelector('#manual-detail-table tbody');
+  detailTbody.innerHTML = rows.map(r => `
+    <tr>
+      <td>${escapeHtml(r.company)}</td>
+      <td>${escapeHtml(r.department)}</td>
+      <td>${escapeHtml(r.person_name || '')}</td>
+      <td>${escapeHtml(r.ai_tool_name || '')}</td>
+      <td>${escapeHtml(r.plan_type || '')}</td>
+      <td class="num">${r.token_amount != null ? fmtInt(r.token_amount) : (r.token_amount_raw ? escapeHtml(r.token_amount_raw) : '—')}</td>
+      <td>${escapeHtml(r.usage_note || '')}</td>
+    </tr>
+  `).join('');
+}
 
 // 進站時檢查是否已登入
 (async function init() {
