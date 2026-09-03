@@ -6,6 +6,7 @@
 <title>AI用量統計</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.108.2/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 <style>
   :root {
     --navy: #0f1b33;
@@ -269,6 +270,19 @@
     font-size: 13px;
     font-family: inherit;
   }
+  .chart-card {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 16px;
+    background: #fff;
+  }
+  .chart-card h3 {
+    font-size: 14px;
+    margin: 0 0 12px;
+    color: var(--navy);
+  }
+  .chart-card .chart-wrap { position: relative; height: 260px; }
 
   @media (max-width: 640px) {
     .container { padding: 16px 12px 40px; }
@@ -434,6 +448,10 @@
         <div class="month-picker-row">
           <label style="font-size:13px;color:var(--muted);">查看月份：</label>
           <input type="month" id="manual-month-picker" />
+          <label style="font-size:13px;color:var(--muted);margin-left:10px;">公司：</label>
+          <select id="manual-company-filter" onchange="applyManualFilter()">
+            <option value="">全部公司</option>
+          </select>
           <button class="btn-mini" onclick="loadManualMonth()">查詢</button>
         </div>
         <div class="table-scroll">
@@ -450,6 +468,11 @@
           </table>
         </div>
         <div class="empty-note" id="manual-empty-note" style="display:none;">這個月份還沒有匯入資料</div>
+      </section>
+
+      <section class="panel">
+        <h2>各公司部門Token分布</h2>
+        <div id="company-charts" style="padding:18px;"></div>
       </section>
 
       <section class="panel">
@@ -986,6 +1009,9 @@ dropZone.addEventListener('drop', (e) => {
 // ══════════════════════════════════════════════════════════
 // 各部門月報表：查看已匯入資料
 // ══════════════════════════════════════════════════════════
+let manualMonthRows = [];      // 這個月份查回來的全部明細（未套用公司篩選）
+let manualCompanyChartInstances = [];
+
 async function loadManualMonth() {
   const val = document.getElementById('manual-month-picker').value;
   if (!val) return;
@@ -993,10 +1019,27 @@ async function loadManualMonth() {
   const { data, error } = await sb.from('manual_ai_usage_monthly').select('*').eq('report_month', reportMonth);
   if (error) {
     console.error('查詢失敗:', error);
-    renderManualTables([]);
-    return;
+    manualMonthRows = [];
+  } else {
+    manualMonthRows = data || [];
   }
-  renderManualTables(data || []);
+  updateCompanyFilterOptions(manualMonthRows);
+  applyManualFilter();
+}
+
+function updateCompanyFilterOptions(rows) {
+  const select = document.getElementById('manual-company-filter');
+  const prevValue = select.value;
+  const companies = [...new Set(rows.map(r => r.company))].sort();
+  select.innerHTML = '<option value="">全部公司</option>' + companies.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+  if (companies.includes(prevValue)) select.value = prevValue;
+}
+
+function applyManualFilter() {
+  const companyFilter = document.getElementById('manual-company-filter').value;
+  const filtered = companyFilter ? manualMonthRows.filter(r => r.company === companyFilter) : manualMonthRows;
+  renderManualTables(filtered);
+  renderCompanyCharts(filtered);
 }
 
 function renderManualTables(rows) {
@@ -1039,6 +1082,66 @@ function renderManualTables(rows) {
       <td>${escapeHtml(r.usage_note || '')}</td>
     </tr>
   `).join('');
+}
+
+// 每家公司各畫一張長條圖：X軸=部門，Y軸=該部門token小計
+function renderCompanyCharts(rows) {
+  manualCompanyChartInstances.forEach(c => c.destroy());
+  manualCompanyChartInstances = [];
+
+  const wrap = document.getElementById('company-charts');
+  wrap.innerHTML = '';
+
+  if (rows.length === 0) {
+    wrap.innerHTML = '<div class="empty-note">沒有資料可畫圖</div>';
+    return;
+  }
+
+  // 依公司分組，同公司下再依部門加總
+  const byCompany = {};
+  rows.forEach(r => {
+    if (!byCompany[r.company]) byCompany[r.company] = {};
+    const dept = r.department;
+    byCompany[r.company][dept] = (byCompany[r.company][dept] || 0) + (r.token_amount || 0);
+  });
+
+  const CHART_COLOR = '#2563eb';
+
+  Object.entries(byCompany).forEach(([company, deptMap], idx) => {
+    const depts = Object.keys(deptMap).sort((a, b) => deptMap[b] - deptMap[a]);
+    const totalTokens = depts.reduce((s, d) => s + deptMap[d], 0);
+
+    const card = document.createElement('div');
+    card.className = 'chart-card';
+    card.innerHTML = `
+      <h3>${escapeHtml(company)}　<span style="color:var(--muted);font-weight:400;font-size:12.5px;">總計 ${fmtInt(totalTokens)} tokens</span></h3>
+      <div class="chart-wrap"><canvas id="chart-canvas-${idx}"></canvas></div>
+    `;
+    wrap.appendChild(card);
+
+    const ctx = card.querySelector('canvas').getContext('2d');
+    const chart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: depts,
+        datasets: [{
+          label: 'Token用量',
+          data: depts.map(d => deptMap[d]),
+          backgroundColor: CHART_COLOR,
+          borderRadius: 4,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { beginAtZero: true, ticks: { callback: (v) => fmtInt(v) } }
+        }
+      }
+    });
+    manualCompanyChartInstances.push(chart);
+  });
 }
 
 // 進站時檢查是否已登入
