@@ -6,7 +6,7 @@
 <title>AI用量統計</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.108.2/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <style>
   :root {
     --navy: #0f1b33;
@@ -1119,28 +1119,34 @@ function renderCompanyCharts(rows) {
     `;
     wrap.appendChild(card);
 
-    const ctx = card.querySelector('canvas').getContext('2d');
-    const chart = new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels: depts,
-        datasets: [{
-          label: 'Token用量',
-          data: depts.map(d => deptMap[d]),
-          backgroundColor: CHART_COLOR,
-          borderRadius: 4,
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: {
-          y: { beginAtZero: true, ticks: { callback: (v) => fmtInt(v) } }
+    try {
+      if (typeof Chart === 'undefined') throw new Error('Chart.js 尚未載入');
+      const ctx = card.querySelector('canvas').getContext('2d');
+      const chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: depts,
+          datasets: [{
+            label: 'Token用量',
+            data: depts.map(d => deptMap[d]),
+            backgroundColor: CHART_COLOR,
+            borderRadius: 4,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            y: { beginAtZero: true, ticks: { callback: (v) => fmtInt(v) } }
+          }
         }
-      }
-    });
-    manualCompanyChartInstances.push(chart);
+      });
+      manualCompanyChartInstances.push(chart);
+    } catch (e) {
+      console.error('畫圖表失敗:', company, e);
+      card.querySelector('.chart-wrap').innerHTML = '<div style="color:var(--muted);font-size:12.5px;padding:20px 0;">圖表載入失敗，請重新整理頁面再試一次</div>';
+    }
   });
 }
 
