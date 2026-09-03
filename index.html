@@ -769,22 +769,37 @@ document.getElementById('main-tabs').addEventListener('click', (e) => {
 let parsedManualRows = [];   // 逐人明細
 let parsedDeptTotals = [];   // Excel自己填的部門小計（只用來跟系統自動加總的結果比對，抓有沒有落差）
 
-// 把 "1.3B" "912M" "60K" "935.4K" 或純數字，轉成實際token數字；解析不出來回傳 null
+// 把 "1.3B" "912M" "60K" "935.4K" 或純數字，轉成實際token數字；
+// 也支援 "29.4K+8.974K" 這種用加號合併多筆的寫法，會自動加總；解析不出來回傳 null
 function parseTokenAmount(raw) {
   if (raw === null || raw === undefined) return null;
   if (typeof raw === 'number') return Math.round(raw);
   const s = String(raw).trim();
   if (!s) return null;
-  const m = s.match(/^([\d.]+)\s*([KkMmBb])$/);
-  if (m) {
-    const num = parseFloat(m[1]);
-    if (isNaN(num)) return null;
-    const mult = { k: 1e3, m: 1e6, b: 1e9 }[m[2].toLowerCase()];
-    return Math.round(num * mult);
+
+  const parseSingle = (piece) => {
+    const p = piece.trim();
+    if (!p) return null;
+    const m = p.match(/^([\d.]+)\s*([KkMmBb])$/);
+    if (m) {
+      const num = parseFloat(m[1]);
+      if (isNaN(num)) return null;
+      const mult = { k: 1e3, m: 1e6, b: 1e9 }[m[2].toLowerCase()];
+      return num * mult;
+    }
+    const plain = parseFloat(p.replace(/,/g, ''));
+    if (!isNaN(plain) && /^[\d.,]+$/.test(p)) return plain;
+    return null;
+  };
+
+  if (s.includes('+')) {
+    const parts = s.split('+').map(parseSingle);
+    if (parts.some(v => v === null)) return null; // 只要有一段看不懂，整筆就當作無法解析，避免漏算
+    return Math.round(parts.reduce((a, b) => a + b, 0));
   }
-  const plain = parseFloat(s.replace(/,/g, ''));
-  if (!isNaN(plain) && /^[\d.,]+$/.test(s)) return Math.round(plain);
-  return null;
+
+  const single = parseSingle(s);
+  return single === null ? null : Math.round(single);
 }
 
 // 把 Excel 儲存格的月份值（可能是 Date 物件、Excel序號、或 "2026/08" 這種字串）轉成該月1號的 "YYYY-MM-01"
