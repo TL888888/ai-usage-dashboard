@@ -284,6 +284,23 @@
   }
   .chart-card .chart-wrap { position: relative; height: 260px; }
 
+  /* ---- Excel匯入彈出視窗 ---- */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(15,27,51,0.45);
+    z-index: 300; display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .modal-box {
+    background: #fff; border-radius: 12px; padding: 24px;
+    width: 100%; max-width: 640px; max-height: 88vh; overflow-y: auto;
+    box-shadow: 0 20px 50px rgba(16,24,40,0.25);
+  }
+  .modal-box h2 { font-size: 15px; }
+  .ai-widget-icon-btn-dark {
+    background: none; border: 1px solid var(--border); color: var(--muted);
+    cursor: pointer; padding: 5px 9px; font-size: 13px; border-radius: 6px;
+  }
+  .ai-widget-icon-btn-dark:hover { background: #f1f5f9; }
+
   @media (max-width: 640px) {
     .container { padding: 16px 12px 40px; }
     header.top { padding: 14px 16px; }
@@ -410,38 +427,47 @@
     </div>
 
     <div class="tab-panel" id="tab-manual-import">
-      <section class="panel">
-        <h2>上傳月報表 Excel</h2>
-        <div class="import-box">
-          <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click();">
-            📄 點擊選擇檔案，或把 Excel 檔拖曳到這裡<br />
-            <span style="font-size:12px;">支援多分頁（每個分頁代表一個公司），格式需跟既有範本一致</span>
+      <div style="display:flex; justify-content:flex-end; margin-bottom:14px;">
+        <button class="btn-mini" onclick="openImportModal()">📤 上傳月報表 Excel</button>
+      </div>
+
+      <div id="import-modal-overlay" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeImportModal();">
+        <div class="modal-box">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <h2 style="margin:0; padding:0; border:none;">上傳月報表 Excel</h2>
+            <button class="ai-widget-icon-btn-dark" onclick="closeImportModal()" title="關閉">✕</button>
           </div>
-          <input type="file" id="file-input" accept=".xlsx,.xls" style="display:none;" onchange="handleFileSelect(event)" />
-          <p class="import-note">
-            解析規則：以「統計月份／公司／部門／姓名／使用AI名稱／方案／使用API名稱／本月token用量／導入工作應用／備註」為欄位對應；<br />
-            token用量支援 1.3B／912M／60K 這種縮寫格式，會自動換算成實際數字；<b>部門小計一律由系統自動加總同部門所有人的數字，不需要你自己先用計算機算好填進Excel</b>（如果Excel裡剛好也有填小計、且跟系統算出來的對不上，畫面上會提醒你）。
-          </p>
-          <div class="import-warning" id="import-warning"></div>
-          <div class="import-summary" id="import-summary">
-            <div class="table-scroll">
-              <table id="preview-table">
-                <thead>
-                  <tr>
-                    <th>公司</th>
-                    <th>部門</th>
-                    <th>月份</th>
-                    <th class="num">人數</th>
-                    <th class="num">部門token小計</th>
-                  </tr>
-                </thead>
-                <tbody></tbody>
-              </table>
+          <div class="import-box">
+            <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click();">
+              📄 點擊選擇檔案，或把 Excel 檔拖曳到這裡<br />
+              <span style="font-size:12px;">支援多分頁（每個分頁代表一個公司），格式需跟既有範本一致</span>
             </div>
-            <button class="btn-primary" id="confirm-import-btn" onclick="confirmImport()">確認匯入</button>
+            <input type="file" id="file-input" accept=".xlsx,.xls" style="display:none;" onchange="handleFileSelect(event)" />
+            <p class="import-note">
+              解析規則：以「統計月份／公司／部門／姓名／使用AI名稱／方案／使用API名稱／本月token用量／導入工作應用／備註」為欄位對應；<br />
+              token用量支援 1.3B／912M／60K 這種縮寫格式，會自動換算成實際數字；<b>部門小計一律由系統自動加總同部門所有人的數字，不需要你自己先用計算機算好填進Excel</b>（如果Excel裡剛好也有填小計、且跟系統算出來的對不上，畫面上會提醒你）。
+            </p>
+            <div class="import-warning" id="import-warning"></div>
+            <div class="import-summary" id="import-summary">
+              <div class="table-scroll">
+                <table id="preview-table">
+                  <thead>
+                    <tr>
+                      <th>公司</th>
+                      <th>部門</th>
+                      <th>月份</th>
+                      <th class="num">人數</th>
+                      <th class="num">部門token小計</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+              <button class="btn-primary" id="confirm-import-btn" onclick="confirmImport()">確認匯入</button>
+            </div>
           </div>
         </div>
-      </section>
+      </div>
 
       <section class="panel">
         <h2>月報表總覽</h2>
@@ -770,6 +796,13 @@ document.getElementById('main-tabs').addEventListener('click', (e) => {
 let parsedManualRows = [];   // 逐人明細
 let parsedDeptTotals = [];   // Excel自己填的部門小計（只用來跟系統自動加總的結果比對，抓有沒有落差）
 
+function openImportModal() {
+  document.getElementById('import-modal-overlay').style.display = 'flex';
+}
+function closeImportModal() {
+  document.getElementById('import-modal-overlay').style.display = 'none';
+}
+
 // 把 "1.3B" "912M" "60K" "935.4K" 或純數字，轉成實際token數字；
 // 也支援 "29.4K+8.974K" 這種用加號合併多筆的寫法，會自動加總；解析不出來回傳 null
 function parseTokenAmount(raw) {
@@ -1008,6 +1041,7 @@ async function confirmImport() {
   alert('匯入成功，共 ' + toInsert.length + ' 筆');
   document.getElementById('import-summary').style.display = 'none';
   document.getElementById('file-input').value = '';
+  closeImportModal();
   loadManualMonth();
 }
 
