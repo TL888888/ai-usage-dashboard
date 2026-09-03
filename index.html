@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AI用量統計</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.108.2/dist/umd/supabase.min.js"></script>
+<style>
+  :root {
+    --navy: #0f1b33;
+    --blue: #2563eb;
+    --blue-dark: #1d4ed8;
+    --border: #e5e7eb;
+    --bg: #f8fafc;
+    --text: #1f2937;
+    --muted: #6b7280;
+    --green: #16a34a;
+    --amber: #d97706;
+    --red: #dc2626;
+    --card: #ffffff;
+  }
+  * { box-sizing: border-box; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: #f1f5f9; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+  html, body { margin: 0; width: 100%; background: var(--bg); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft JhengHei", "PingFang TC", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--text);
+  }
+
+  /* ---- 登入畫面 ---- */
+  #login-screen {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .login-box {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 32px;
+    width: 100%;
+    max-width: 360px;
+    box-shadow: 0 8px 30px rgba(16,24,40,0.08);
+  }
+  .login-box h1 {
+    font-size: 19px;
+    margin: 0 0 4px;
+    color: var(--navy);
+  }
+  .login-box p.sub {
+    font-size: 13px;
+    color: var(--muted);
+    margin: 0 0 20px;
+  }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
+  .field input {
+    width: 100%;
+    padding: 9px 11px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    font-size: 14px;
+    font-family: inherit;
+  }
+  .field input:focus { outline: none; border-color: var(--blue); }
+  .btn-primary {
+    width: 100%;
+    background: var(--blue);
+    color: #fff;
+    border: none;
+    border-radius: 7px;
+    padding: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .btn-primary:hover { background: var(--blue-dark); }
+  .btn-primary:disabled { opacity: 0.6; cursor: default; }
+  .login-error {
+    background: #fef2f2;
+    color: var(--red);
+    font-size: 12.5px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    margin-bottom: 14px;
+    display: none;
+  }
+
+  /* ---- 主畫面 ---- */
+  #app-screen { display: none; min-height: 100vh; }
+  header.top {
+    background: var(--navy);
+    color: #fff;
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  header.top h1 { font-size: 17px; margin: 0; font-weight: 700; }
+  header.top .user-info { font-size: 12.5px; color: #b8c2d9; display: flex; align-items: center; gap: 14px; }
+  header.top .user-info button {
+    background: none; border: 1px solid #3a4a6b; color: #cbd5e1;
+    padding: 5px 12px; border-radius: 6px; cursor: pointer; font-size: 12.5px; font-family: inherit;
+  }
+  header.top .user-info button:hover { background: #1a2947; }
+
+  .container { max-width: 1180px; margin: 0 auto; padding: 22px 20px 60px; }
+
+  .range-tabs { display: flex; gap: 6px; margin-bottom: 20px; flex-wrap: wrap; }
+  .range-tabs button {
+    padding: 7px 16px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: #fff;
+    font-size: 13px;
+    cursor: pointer;
+    color: var(--muted);
+    font-family: inherit;
+  }
+  .range-tabs button.active { background: var(--navy); color: #fff; border-color: var(--navy); }
+
+  .summary-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 26px; }
+  .summary-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+  }
+  .summary-card .label { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .summary-card .value { font-size: 24px; font-weight: 700; color: var(--navy); }
+  .summary-card .value.cost { color: var(--amber); }
+
+  section.panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 22px;
+    overflow: hidden;
+  }
+  section.panel h2 {
+    font-size: 14.5px;
+    margin: 0;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    color: var(--navy);
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table th {
+    text-align: left;
+    padding: 9px 18px;
+    background: #f8fafc;
+    color: var(--muted);
+    font-weight: 600;
+    font-size: 12px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  table td {
+    padding: 9px 18px;
+    border-bottom: 1px solid #f1f5f9;
+    white-space: nowrap;
+  }
+  table tr:last-child td { border-bottom: none; }
+  table tbody tr:hover { background: #fafbfc; }
+  td.num, th.num { text-align: right; }
+  .badge {
+    display: inline-block;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #eef2ff;
+    color: var(--blue-dark);
+    font-weight: 600;
+  }
+  .cache-badge {
+    display: inline-block;
+    font-size: 10.5px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: #f0fdf4;
+    color: var(--green);
+  }
+  .empty-note { padding: 24px 18px; text-align: center; color: var(--muted); font-size: 13px; }
+  .table-scroll { overflow-x: auto; }
+  .system-name-cell { font-weight: 600; color: var(--navy); }
+
+  @media (max-width: 640px) {
+    .container { padding: 16px 12px 40px; }
+    header.top { padding: 14px 16px; }
+    table th, table td { padding: 8px 10px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <div class="login-box">
+    <h1>AI用量統計</h1>
+    <p class="sub">請登入你的 TL_projects 帳號查看報表</p>
+    <div class="login-error" id="login-error"></div>
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="login-email" autocomplete="username" />
+    </div>
+    <div class="field">
+      <label>密碼</label>
+      <input type="password" id="login-password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin();" />
+    </div>
+    <button class="btn-primary" id="login-btn" onclick="doLogin()">登入</button>
+  </div>
+</div>
+
+<div id="app-screen">
+  <header class="top">
+    <h1>📊 AI用量統計</h1>
+    <div class="user-info">
+      <span id="user-email-label"></span>
+      <button onclick="doLogout()">登出</button>
+    </div>
+  </header>
+
+  <div class="container">
+    <div class="range-tabs" id="range-tabs">
+      <button data-range="today">今天</button>
+      <button data-range="7" class="active">近7天</button>
+      <button data-range="30">近30天</button>
+      <button data-range="all">全部</button>
+    </div>
+
+    <div class="summary-row" id="summary-row"></div>
+
+    <section class="panel">
+      <h2>各系統用量比較</h2>
+      <div class="table-scroll">
+        <table id="system-table">
+          <thead>
+            <tr>
+              <th>系統</th>
+              <th class="num">問答次數</th>
+              <th class="num">總Token</th>
+              <th class="num">估計花費 (USD)</th>
+              <th class="num">快取命中</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="empty-note" style="display:none;">這段期間沒有任何用量紀錄</div>
+    </section>
+
+    <section class="panel">
+      <h2>提問者排行</h2>
+      <div class="table-scroll">
+        <table id="asker-table">
+          <thead>
+            <tr>
+              <th>提問者</th>
+              <th class="num">問答次數</th>
+              <th class="num">總Token</th>
+              <th class="num">估計花費 (USD)</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="empty-note" style="display:none;">這段期間沒有任何用量紀錄</div>
+    </section>
+
+    <section class="panel">
+      <h2>最近紀錄（最多顯示100筆）</h2>
+      <div class="table-scroll">
+        <table id="recent-table">
+          <thead>
+            <tr>
+              <th>時間</th>
+              <th>系統</th>
+              <th>提問者</th>
+              <th class="num">輸入Token</th>
+              <th class="num">輸出Token</th>
+              <th class="num">花費 (USD)</th>
+              <th>備註</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="empty-note" style="display:none;">這段期間沒有任何用量紀錄</div>
+    </section>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://bvuygyajzupeqpqfwmgi.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ2dXlneWFqenVwZXFwcWZ3bWdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxNjA5MjQsImV4cCI6MjA5NzczNjkyNH0.zvP-JWgHRWiCKZbqSSU6-uGgx3WHwG0nFxfG8xDhEH8';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let currentRange = '7';
+let allEvents = [];
+
+function fmtMoney(n) {
+  return '$' + (n || 0).toFixed(4);
+}
+function fmtInt(n) {
+  return (n || 0).toLocaleString('en-US');
+}
+function fmtDate(iso) {
+  const d = new Date(iso);
+  return d.toLocaleString('zh-TW', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  const errBox = document.getElementById('login-error');
+  const btn = document.getElementById('login-btn');
+  errBox.style.display = 'none';
+  if (!email || !password) {
+    errBox.textContent = '請輸入 email 與密碼';
+    errBox.style.display = 'block';
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = '登入中...';
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  btn.disabled = false;
+  btn.textContent = '登入';
+  if (error) {
+    errBox.textContent = '登入失敗：' + error.message;
+    errBox.style.display = 'block';
+    return;
+  }
+  enterApp(data.user);
+}
+
+async function doLogout() {
+  await sb.auth.signOut();
+  document.getElementById('app-screen').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+}
+
+function enterApp(user) {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app-screen').style.display = 'block';
+  document.getElementById('user-email-label').textContent = user.email;
+  loadData();
+}
+
+function rangeStartISO(range) {
+  const now = new Date();
+  if (range === 'all') return null;
+  if (range === 'today') {
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    return start.toISOString();
+  }
+  const days = Number(range);
+  const start = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+  return start.toISOString();
+}
+
+async function loadData() {
+  const start = rangeStartISO(currentRange);
+  let query = sb.from('ai_usage_events').select('*').order('created_at', { ascending: false }).limit(2000);
+  if (start) query = query.gte('created_at', start);
+  const { data, error } = await query;
+  if (error) {
+    console.error('查詢失敗:', error);
+    allEvents = [];
+  } else {
+    allEvents = data || [];
+  }
+  render();
+}
+
+function render() {
+  renderSummary();
+  renderSystemTable();
+  renderAskerTable();
+  renderRecentTable();
+}
+
+function renderSummary() {
+  const totalQueries = allEvents.length;
+  const totalTokens = allEvents.reduce((s, e) => s + (e.total_tokens || 0), 0);
+  const totalCost = allEvents.reduce((s, e) => s + Number(e.estimated_cost_usd || 0), 0);
+  const cacheHits = allEvents.filter(e => e.cache_hit).length;
+  const wrap = document.getElementById('summary-row');
+  wrap.innerHTML = `
+    <div class="summary-card"><div class="label">問答總次數</div><div class="value">${fmtInt(totalQueries)}</div></div>
+    <div class="summary-card"><div class="label">總Token數</div><div class="value">${fmtInt(totalTokens)}</div></div>
+    <div class="summary-card"><div class="label">估計總花費</div><div class="value cost">${fmtMoney(totalCost)}</div></div>
+    <div class="summary-card"><div class="label">快取命中次數</div><div class="value">${fmtInt(cacheHits)}</div></div>
+  `;
+}
+
+const SYSTEM_LABELS = {
+  astech: '服務部技術論壇',
+  bom: 'BOM管理系統',
+  wechat: '營業商務訊息',
+  interview: '董事長訪談',
+  qc: '品保系統',
+};
+
+function renderSystemTable() {
+  const groups = {};
+  allEvents.forEach(e => {
+    const key = e.system_name || '(未知)';
+    if (!groups[key]) groups[key] = { count: 0, tokens: 0, cost: 0, cacheHits: 0 };
+    groups[key].count++;
+    groups[key].tokens += e.total_tokens || 0;
+    groups[key].cost += Number(e.estimated_cost_usd || 0);
+    if (e.cache_hit) groups[key].cacheHits++;
+  });
+  const rows = Object.entries(groups).sort((a, b) => b[1].cost - a[1].cost);
+  const tbody = document.querySelector('#system-table tbody');
+  const emptyNote = document.querySelector('#system-table').parentElement.nextElementSibling;
+  if (rows.length === 0) {
+    tbody.innerHTML = '';
+    emptyNote.style.display = 'block';
+    return;
+  }
+  emptyNote.style.display = 'none';
+  tbody.innerHTML = rows.map(([name, g]) => `
+    <tr>
+      <td class="system-name-cell">${escapeHtml(SYSTEM_LABELS[name] || name)}<br><span style="font-size:11px;color:var(--muted);font-weight:400;">${escapeHtml(name)}</span></td>
+      <td class="num">${fmtInt(g.count)}</td>
+      <td class="num">${fmtInt(g.tokens)}</td>
+      <td class="num">${fmtMoney(g.cost)}</td>
+      <td class="num">${g.cacheHits > 0 ? `<span class="cache-badge">${g.cacheHits}</span>` : '—'}</td>
+    </tr>
+  `).join('');
+}
+
+function renderAskerTable() {
+  const groups = {};
+  allEvents.forEach(e => {
+    const key = e.asker_email || '(未記錄)';
+    if (!groups[key]) groups[key] = { count: 0, tokens: 0, cost: 0 };
+    groups[key].count++;
+    groups[key].tokens += e.total_tokens || 0;
+    groups[key].cost += Number(e.estimated_cost_usd || 0);
+  });
+  const rows = Object.entries(groups).sort((a, b) => b[1].count - a[1].count);
+  const tbody = document.querySelector('#asker-table tbody');
+  const emptyNote = document.querySelector('#asker-table').parentElement.nextElementSibling;
+  if (rows.length === 0) {
+    tbody.innerHTML = '';
+    emptyNote.style.display = 'block';
+    return;
+  }
+  emptyNote.style.display = 'none';
+  tbody.innerHTML = rows.map(([email, g]) => `
+    <tr>
+      <td>${escapeHtml(email)}</td>
+      <td class="num">${fmtInt(g.count)}</td>
+      <td class="num">${fmtInt(g.tokens)}</td>
+      <td class="num">${fmtMoney(g.cost)}</td>
+    </tr>
+  `).join('');
+}
+
+function renderRecentTable() {
+  const rows = allEvents.slice(0, 100);
+  const tbody = document.querySelector('#recent-table tbody');
+  const emptyNote = document.querySelector('#recent-table').parentElement.nextElementSibling;
+  if (rows.length === 0) {
+    tbody.innerHTML = '';
+    emptyNote.style.display = 'block';
+    return;
+  }
+  emptyNote.style.display = 'none';
+  tbody.innerHTML = rows.map(e => `
+    <tr>
+      <td>${fmtDate(e.created_at)}</td>
+      <td><span class="badge">${escapeHtml(SYSTEM_LABELS[e.system_name] || e.system_name || '-')}</span></td>
+      <td>${escapeHtml(e.asker_email || '—')}</td>
+      <td class="num">${fmtInt(e.prompt_tokens)}</td>
+      <td class="num">${fmtInt(e.completion_tokens)}</td>
+      <td class="num">${fmtMoney(e.estimated_cost_usd)}</td>
+      <td>${e.cache_hit ? '<span class="cache-badge">快取命中</span>' : ''}</td>
+    </tr>
+  `).join('');
+}
+
+document.getElementById('range-tabs').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-range]');
+  if (!btn) return;
+  document.querySelectorAll('#range-tabs button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  currentRange = btn.dataset.range;
+  loadData();
+});
+
+// 進站時檢查是否已登入
+(async function init() {
+  const { data } = await sb.auth.getSession();
+  if (data && data.session && data.session.user) {
+    enterApp(data.session.user);
+  }
+})();
+</script>
+
+</body>
+</html>
