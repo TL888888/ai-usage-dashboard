@@ -301,6 +301,12 @@
     cursor: pointer; padding: 5px 9px; font-size: 13px; border-radius: 6px;
   }
   .ai-widget-icon-btn-dark:hover { background: #f1f5f9; }
+  .admin-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 6px; font-size: 13px;
+  }
+  .admin-row .del-btn { background: none; border: none; color: var(--red); cursor: pointer; font-size: 12px; }
+  .admin-row .del-btn:hover { text-decoration: underline; }
 
   @media (max-width: 640px) {
     .container { padding: 16px 12px 40px; }
@@ -334,9 +340,26 @@
     <h1>📊 AI用量統計</h1>
     <div class="user-info">
       <span id="user-email-label"></span>
+      <button onclick="openAdminModal()">👤 帳號管理</button>
       <button onclick="doLogout()">登出</button>
     </div>
   </header>
+
+  <div id="admin-modal-overlay" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeAdminModal();">
+    <div class="modal-box" style="max-width:460px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <h2 style="margin:0; padding:0; border:none;">帳號管理</h2>
+        <button class="ai-widget-icon-btn-dark" onclick="closeAdminModal()" title="關閉">✕</button>
+      </div>
+      <p class="import-note" style="margin-top:0;">名單裡的人才能登入查看這個儀表板的資料，其他人即使有 TL_projects 帳號也登入得進來但看不到任何數字。</p>
+      <div id="admin-list" style="margin-bottom:16px;"></div>
+      <div style="display:flex; gap:8px;">
+        <input type="email" id="new-admin-email" placeholder="新增管理員的email" style="flex:1; padding:8px 10px; border:1px solid var(--border); border-radius:7px; font-size:13px; font-family:inherit;" />
+        <button class="btn-mini" onclick="addAdmin()">新增</button>
+      </div>
+      <div id="admin-error" style="color:var(--red); font-size:12.5px; margin-top:8px; display:none;"></div>
+    </div>
+  </div>
 
   <div class="main-tabs" id="main-tabs">
     <button data-tab="ai-systems" class="active">大量雲端系統統計</button>
@@ -584,6 +607,70 @@ function enterApp(user) {
   document.getElementById('app-screen').style.display = 'block';
   document.getElementById('user-email-label').textContent = user.email;
   loadData();
+}
+
+// ══════════════════════════════════════════════════════════
+// 帳號管理：誰可以登入看這個儀表板
+// ══════════════════════════════════════════════════════════
+function openAdminModal() {
+  document.getElementById('admin-modal-overlay').style.display = 'flex';
+  document.getElementById('admin-error').style.display = 'none';
+  loadAdminList();
+}
+function closeAdminModal() {
+  document.getElementById('admin-modal-overlay').style.display = 'none';
+}
+
+async function loadAdminList() {
+  const listEl = document.getElementById('admin-list');
+  listEl.innerHTML = '<div style="color:var(--muted);font-size:13px;">載入中...</div>';
+  const { data, error } = await sb.from('dashboard_admins').select('*').order('added_at', { ascending: true });
+  if (error) {
+    listEl.innerHTML = `<div style="color:var(--red);font-size:13px;">讀取失敗：${escapeHtml(error.message)}（你的帳號可能不在管理員名單裡，無法管理名單）</div>`;
+    return;
+  }
+  if (!data || data.length === 0) {
+    listEl.innerHTML = '<div style="color:var(--muted);font-size:13px;">目前沒有任何管理員</div>';
+    return;
+  }
+  listEl.innerHTML = data.map(a => `
+    <div class="admin-row">
+      <span>${escapeHtml(a.email)}${a.display_name ? '　<span style="color:var(--muted);">(' + escapeHtml(a.display_name) + ')</span>' : ''}</span>
+      <button class="del-btn" onclick="removeAdmin('${escapeHtml(a.email).replace(/'/g, "\\'")}')">移除</button>
+    </div>
+  `).join('');
+}
+
+async function addAdmin() {
+  const input = document.getElementById('new-admin-email');
+  const email = input.value.trim().toLowerCase();
+  const errBox = document.getElementById('admin-error');
+  errBox.style.display = 'none';
+  if (!email || !email.includes('@')) {
+    errBox.textContent = '請輸入有效的email';
+    errBox.style.display = 'block';
+    return;
+  }
+  const { error } = await sb.from('dashboard_admins').insert({ email, added_by: document.getElementById('user-email-label').textContent });
+  if (error) {
+    errBox.textContent = '新增失敗：' + error.message;
+    errBox.style.display = 'block';
+    return;
+  }
+  input.value = '';
+  loadAdminList();
+}
+
+async function removeAdmin(email) {
+  if (email === document.getElementById('user-email-label').textContent) {
+    if (!confirm('這是你自己的帳號，移除後你自己也會失去存取權限，確定要移除嗎？')) return;
+  }
+  const { error } = await sb.from('dashboard_admins').delete().eq('email', email);
+  if (error) {
+    alert('移除失敗：' + error.message);
+    return;
+  }
+  loadAdminList();
 }
 
 function rangeStartISO(range) {
