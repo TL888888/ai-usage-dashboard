@@ -523,7 +523,7 @@
 
       <section class="panel">
         <h2>各公司部門Token分布</h2>
-        <p class="import-note" style="padding:0 20px;">此圖已合併兩種來源：公司自建AI系統（自動統計）＋ 個人工具回報（Excel匯入）。數字換算成B（十億token）方便閱讀，滑鼠移到長條上可看確切數字。點一下長條可以往下鑽看明細，上方會出現「返回」按鈕。</p>
+        <p class="import-note" style="padding:0 20px;">此圖已合併兩種來源：公司自建AI系統（自動統計）＋ 個人工具回報（Excel匯入）。數字換算成K（千token）方便閱讀，滑鼠移到長條上可看確切數字。點一下長條可以往下鑽看明細，上方會出現「返回」按鈕。</p>
         <div id="company-charts" style="padding:18px;"></div>
       </section>
 
@@ -767,8 +767,8 @@ const SYSTEM_LABELS = {
   shipping: '出貨實績系統',
 };
 
-function fmtTokensB(n) {
-  return ((n || 0) / 1e9).toFixed(3) + 'B';
+function fmtTokensK(n) {
+  return ((n || 0) / 1e3).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + 'K';
 }
 
 function renderSystemTable() {
@@ -1364,7 +1364,7 @@ function renderDrilldownView() {
   const card = document.createElement('div');
   card.className = 'chart-card';
   card.innerHTML = `
-    <h3>${levelTitle}Token用量　<span style="color:var(--muted);font-weight:400;font-size:12.5px;">總計 ${fmtTokensB(grandTotal)}</span></h3>
+    <h3>${levelTitle}Token用量　<span style="color:var(--muted);font-weight:400;font-size:12.5px;">總計 ${fmtTokensK(grandTotal)}</span></h3>
     <div class="chart-wrap" style="height:${Math.max(220, labels.length * 42)}px;"><canvas id="drilldown-canvas"></canvas></div>
   `;
   wrap.appendChild(card);
@@ -1392,7 +1392,7 @@ function renderDrilldownView() {
         c.font = '600 12px -apple-system, "Microsoft JhengHei", "PingFang TC", sans-serif';
         c.textBaseline = 'middle';
         meta.data.forEach((bar, idx) => {
-          const label = fmtTokensB(values[idx]);
+          const label = fmtTokensK(values[idx]);
           const textWidth = c.measureText(label).width;
           const pos = bar.tooltipPosition();
           const fitsOutside = pos.x + 8 + textWidth <= chartArea.right;
@@ -1433,12 +1433,12 @@ function renderDrilldownView() {
           legend: { display: false },
           tooltip: {
             callbacks: {
-              label: (ctx) => `${fmtInt(ctx.raw)} tokens（約 ${fmtTokensB(ctx.raw)}）`
+              label: (ctx) => `${fmtInt(ctx.raw)} tokens（約 ${fmtTokensK(ctx.raw)}）`
             }
           }
         },
         scales: {
-          x: { beginAtZero: true, ticks: { callback: (v) => fmtTokensB(v) } }
+          x: { beginAtZero: true, ticks: { callback: (v) => fmtTokensK(v) } }
         },
         onClick: (evt, elements) => {
           if (!canDrillFurther || !elements.length) return;
