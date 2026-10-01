@@ -494,7 +494,7 @@
       </div>
 
       <section class="panel">
-        <h2>月報表總覽</h2>
+        <h2>各公司部門Token分布</h2>
         <div class="month-picker-row">
           <label style="font-size:13px;color:var(--muted);">查看月份：</label>
           <input type="month" id="manual-month-picker" />
@@ -504,6 +504,13 @@
           </select>
           <button class="btn-mini" onclick="loadManualMonth()">查詢</button>
         </div>
+        <p class="import-note" style="padding:0 20px;">已合併兩種來源：公司自建AI系統（自動統計）＋ 個人工具回報（Excel匯入）。數字換算成K（千token）方便閱讀，滑鼠移到長條上可看確切數字。每家公司的部門別用量直接顯示在下面，不用點就看得到；想看某部門細分用在哪方面，點一下那根部門長條即可，上方會出現「返回」按鈕。</p>
+        <div id="company-summary-line" style="padding:4px 20px 0; font-size:14px; color:var(--text); line-height:1.8;"></div>
+        <div id="company-charts" style="padding:18px;"></div>
+      </section>
+
+      <section class="panel">
+        <h2>月報表總覽</h2>
         <div class="table-scroll">
           <table id="manual-summary-table">
             <thead>
@@ -519,12 +526,6 @@
           </table>
         </div>
         <div class="empty-note" id="manual-empty-note" style="display:none;">這個月份還沒有匯入資料</div>
-      </section>
-
-      <section class="panel">
-        <h2>各公司部門Token分布</h2>
-        <p class="import-note" style="padding:0 20px;">此圖已合併兩種來源：公司自建AI系統（自動統計）＋ 個人工具回報（Excel匯入）。數字換算成K（千token）方便閱讀，滑鼠移到長條上可看確切數字。點一下長條可以往下鑽看明細，上方會出現「返回」按鈕。</p>
-        <div id="company-charts" style="padding:18px;"></div>
       </section>
 
       <section class="panel">
@@ -1274,11 +1275,12 @@ function renderManualTables(rows, internalRows) {
 }
 
 // ══════════════════════════════════════════════════════════
-// 公司→部門→用途 三層鑽研圖表（內部系統與外部工具已合併加總）
+// 各公司部門Token分布：預設直接列出每家公司的部門別長條圖（不用點就看得到數字），
+// 點某根部門長條才會再往下鑽看「這個部門的token用在哪方面」
 // ══════════════════════════════════════════════════════════
 let drilldownCombinedRows = [];  // 目前篩選範圍內的逐筆資料（已標準化成 company/department/token_amount/source_label）
-let drilldownState = { level: 'company', company: null, department: null };
-let drilldownChartInstance = null;
+let drilldownSourceView = null;  // null＝顯示各公司部門總覽；{company, department}＝正在看某部門的用途細分
+let drilldownChartInstances = [];
 
 function combineDrilldownRows(externalRows, internalRows) {
   const combined = [];
@@ -1297,102 +1299,79 @@ function combineDrilldownRows(externalRows, internalRows) {
   return combined;
 }
 
+// 畫面最上方那行文字摘要：月份＋總計＋各公司小計，一眼就看得到數字，不用等圖表
+function renderCompanySummaryLine() {
+  const lineEl = document.getElementById('company-summary-line');
+  if (!lineEl) return;
+  if (drilldownCombinedRows.length === 0) { lineEl.innerHTML = ''; return; }
+
+  const monthVal = document.getElementById('manual-month-picker').value;
+  let monthLabel = '';
+  if (monthVal) {
+    const [y, m] = monthVal.split('-').map(Number);
+    monthLabel = y + '年' + m + '月';
+  }
+
+  const byCompany = {};
+  drilldownCombinedRows.forEach(r => { byCompany[r.company] = (byCompany[r.company] || 0) + (r.token_amount || 0); });
+  const companies = Object.keys(byCompany).sort((a, b) => byCompany[b] - byCompany[a]);
+  const grandTotal = companies.reduce((s, c) => s + byCompany[c], 0);
+  const perCompanyText = companies
+    .map(c => `<span style="margin-right:20px; display:inline-block; margin-top:4px;"><strong style="color:var(--navy);">${escapeHtml(c)}</strong>：${fmtTokensK(byCompany[c])}</span>`)
+    .join('');
+
+  lineEl.innerHTML = `
+    <div><strong style="color:var(--navy); font-size:15px;">${escapeHtml(monthLabel)}　總計 ${fmtTokensK(grandTotal)}</strong></div>
+    <div>${perCompanyText}</div>
+  `;
+}
+
 function renderCompanyDrilldown(externalRows, internalRows) {
   drilldownCombinedRows = combineDrilldownRows(externalRows, internalRows);
-  // 如果篩選器已經選了特定公司，直接從「部門」這層看起；否則從「公司」這層看起
-  const companyFilter = document.getElementById('manual-company-filter').value;
-  drilldownState = companyFilter
-    ? { level: 'department', company: companyFilter, department: null }
-    : { level: 'company', company: null, department: null };
+  drilldownSourceView = null; // 每次重新查詢／篩選，都回到預設的「各公司部門總覽」畫面
+  renderCompanySummaryLine();
   renderDrilldownView();
 }
 
 function drilldownBack() {
-  if (drilldownState.level === 'source') {
-    drilldownState = { level: 'department', company: drilldownState.company, department: null };
-  } else if (drilldownState.level === 'department') {
-    drilldownState = { level: 'company', company: null, department: null };
-  }
+  drilldownSourceView = null;
   renderDrilldownView();
 }
 
-function renderDrilldownView() {
-  if (drilldownChartInstance) { drilldownChartInstance.destroy(); drilldownChartInstance = null; }
-
-  const wrap = document.getElementById('company-charts');
-  wrap.innerHTML = '';
-
-  if (drilldownCombinedRows.length === 0) {
-    wrap.innerHTML = '<div class="empty-note">沒有資料可畫圖</div>';
-    return;
-  }
-
-  // 麵包屑／返回鈕
-  const crumbEl = document.createElement('div');
-  crumbEl.style.cssText = 'margin-bottom:12px; font-size:13px; color:var(--muted); display:flex; align-items:center; gap:10px; flex-wrap:wrap;';
-  if (drilldownState.level === 'company') {
-    crumbEl.innerHTML = '<strong style="color:var(--navy);">公司別總覽</strong>（點長條看部門別）';
-  } else if (drilldownState.level === 'department') {
-    crumbEl.innerHTML = `<button class="btn-mini" style="padding:4px 10px;" onclick="drilldownBack()">← 返回公司別</button><strong style="color:var(--navy);">${escapeHtml(drilldownState.company)}　部門別</strong>（點長條看用在哪方面）`;
-  } else {
-    crumbEl.innerHTML = `<button class="btn-mini" style="padding:4px 10px;" onclick="drilldownBack()">← 返回部門別</button><strong style="color:var(--navy);">${escapeHtml(drilldownState.company)} / ${escapeHtml(drilldownState.department)}　用途分布</strong>`;
-  }
-  wrap.appendChild(crumbEl);
-
-  // 依目前所在的層級，決定要用哪個欄位分組加總
-  let rowsInScope, groupKeyFn;
-  if (drilldownState.level === 'company') {
-    rowsInScope = drilldownCombinedRows;
-    groupKeyFn = r => r.company;
-  } else if (drilldownState.level === 'department') {
-    rowsInScope = drilldownCombinedRows.filter(r => r.company === drilldownState.company);
-    groupKeyFn = r => r.department;
-  } else {
-    rowsInScope = drilldownCombinedRows.filter(r => r.company === drilldownState.company && r.department === drilldownState.department);
-    groupKeyFn = r => r.source_label;
-  }
-
-  const totals = {};
-  rowsInScope.forEach(r => {
-    const key = groupKeyFn(r) || '未填';
-    totals[key] = (totals[key] || 0) + (r.token_amount || 0);
-  });
-  const labels = Object.keys(totals).sort((a, b) => totals[b] - totals[a]);
-  const grandTotal = labels.reduce((s, l) => s + totals[l], 0);
-
-  const levelTitle = { company: '各公司', department: '各部門', source: '各用途' }[drilldownState.level];
+// 畫一張長條圖到指定容器，labels/values 已經是分組加總好的資料；onBarClick 給了才能點長條鑽下去
+function drawDrilldownBarChart(container, title, labels, values, onBarClick) {
   const card = document.createElement('div');
   card.className = 'chart-card';
+  const grandTotal = values.reduce((s, v) => s + v, 0);
   card.innerHTML = `
-    <h3>${levelTitle}Token用量　<span style="color:var(--muted);font-weight:400;font-size:12.5px;">總計 ${fmtTokensK(grandTotal)}</span></h3>
-    <div class="chart-wrap" style="height:${Math.max(220, labels.length * 42)}px;"><canvas id="drilldown-canvas"></canvas></div>
+    <h3>${escapeHtml(title)}　<span style="color:var(--muted);font-weight:400;font-size:12.5px;">總計 ${fmtTokensK(grandTotal)}</span></h3>
+    <div class="chart-wrap" style="height:${Math.max(160, labels.length * 42)}px;"><canvas></canvas></div>
   `;
-  wrap.appendChild(card);
+  container.appendChild(card);
 
   if (labels.length === 0) {
     card.querySelector('.chart-wrap').innerHTML = '<div class="empty-note">沒有資料</div>';
-    return;
+    return null;
   }
 
   try {
     if (typeof Chart === 'undefined') throw new Error('Chart.js 尚未載入');
     const ctx = card.querySelector('canvas').getContext('2d');
     const CHART_COLOR = '#2563eb';
-    const canDrillFurther = drilldownState.level !== 'source';
 
     // 直接把數字標在長條上：長條夠長就標在長條尾端外面（深色字），
     // 長條太短（數字很小、光看長度看不出來）就改標在長條裡面靠右（白字），確保每一條都看得到確切數字
-    const drilldownDataLabelsPlugin = {
+    const dataLabelsPlugin = {
       id: 'drilldownDataLabels',
       afterDatasetsDraw(chartInstance) {
         const { ctx: c, chartArea } = chartInstance;
         const meta = chartInstance.getDatasetMeta(0);
-        const values = chartInstance.data.datasets[0].data;
+        const vals = chartInstance.data.datasets[0].data;
         c.save();
         c.font = '600 12px -apple-system, "Microsoft JhengHei", "PingFang TC", sans-serif';
         c.textBaseline = 'middle';
         meta.data.forEach((bar, idx) => {
-          const label = fmtTokensK(values[idx]);
+          const label = fmtTokensK(vals[idx]);
           const textWidth = c.measureText(label).width;
           const pos = bar.tooltipPosition();
           const fitsOutside = pos.x + 8 + textWidth <= chartArea.right;
@@ -1410,18 +1389,13 @@ function renderDrilldownView() {
       }
     };
 
-    drilldownChartInstance = new Chart(ctx, {
+    const chart = new Chart(ctx, {
       type: 'bar',
       data: {
         labels,
-        datasets: [{
-          label: 'Token用量',
-          data: labels.map(l => totals[l]),
-          backgroundColor: CHART_COLOR,
-          borderRadius: 4,
-        }]
+        datasets: [{ label: 'Token用量', data: values, backgroundColor: CHART_COLOR, borderRadius: 4 }]
       },
-      plugins: [drilldownDataLabelsPlugin],
+      plugins: [dataLabelsPlugin],
       options: {
         indexAxis: 'y',
         responsive: true,
@@ -1431,34 +1405,84 @@ function renderDrilldownView() {
         interaction: { mode: 'nearest', axis: 'y', intersect: false },
         plugins: {
           legend: { display: false },
-          tooltip: {
-            callbacks: {
-              label: (ctx) => `${fmtInt(ctx.raw)} tokens（約 ${fmtTokensK(ctx.raw)}）`
-            }
-          }
+          tooltip: { callbacks: { label: (c2) => `${fmtInt(c2.raw)} tokens（約 ${fmtTokensK(c2.raw)}）` } }
         },
-        scales: {
-          x: { beginAtZero: true, ticks: { callback: (v) => fmtTokensK(v) } }
-        },
-        onClick: (evt, elements) => {
-          if (!canDrillFurther || !elements.length) return;
-          const clickedLabel = labels[elements[0].index];
-          if (drilldownState.level === 'company') {
-            drilldownState = { level: 'department', company: clickedLabel, department: null };
-          } else if (drilldownState.level === 'department') {
-            drilldownState = { level: 'source', company: drilldownState.company, department: clickedLabel };
-          }
-          renderDrilldownView();
-        },
+        scales: { x: { beginAtZero: true, ticks: { callback: (v) => fmtTokensK(v) } } },
+        onClick: onBarClick ? (evt, elements) => {
+          if (!elements.length) return;
+          onBarClick(labels[elements[0].index]);
+        } : undefined,
         onHover: (evt, elements) => {
-          evt.native.target.style.cursor = (canDrillFurther && elements.length) ? 'pointer' : 'default';
+          evt.native.target.style.cursor = (onBarClick && elements.length) ? 'pointer' : 'default';
         }
       }
     });
+    return chart;
   } catch (e) {
-    console.error('畫圖表失敗:', e);
+    console.error('畫圖表失敗:', title, e);
     card.querySelector('.chart-wrap').innerHTML = '<div style="color:var(--muted);font-size:12.5px;padding:20px 0;">圖表載入失敗，請重新整理頁面再試一次</div>';
+    return null;
   }
+}
+
+function renderDrilldownView() {
+  drilldownChartInstances.forEach(c => c && c.destroy());
+  drilldownChartInstances = [];
+
+  const wrap = document.getElementById('company-charts');
+  wrap.innerHTML = '';
+
+  if (drilldownCombinedRows.length === 0) {
+    wrap.innerHTML = '<div class="empty-note">沒有資料可畫圖</div>';
+    return;
+  }
+
+  if (drilldownSourceView) {
+    // 正在看某個「公司/部門」的用途細分：只畫這一張，上面有返回鈕
+    const { company, department } = drilldownSourceView;
+    const crumbEl = document.createElement('div');
+    crumbEl.style.cssText = 'margin-bottom:12px; font-size:13px; color:var(--muted); display:flex; align-items:center; gap:10px;';
+    crumbEl.innerHTML = `<button class="btn-mini" style="padding:4px 10px;" onclick="drilldownBack()">← 返回各公司部門總覽</button><strong style="color:var(--navy);">${escapeHtml(company)} / ${escapeHtml(department)}　用途分布</strong>`;
+    wrap.appendChild(crumbEl);
+
+    const rowsInScope = drilldownCombinedRows.filter(r => r.company === company && r.department === department);
+    const totals = {};
+    rowsInScope.forEach(r => {
+      const key = r.source_label || '未填';
+      totals[key] = (totals[key] || 0) + (r.token_amount || 0);
+    });
+    const labels = Object.keys(totals).sort((a, b) => totals[b] - totals[a]);
+    const chart = drawDrilldownBarChart(wrap, '用途Token用量', labels, labels.map(l => totals[l]), null);
+    if (chart) drilldownChartInstances.push(chart);
+    return;
+  }
+
+  // 預設畫面：每家公司各畫一張「部門別」長條圖，數字直接標在長條上，不用點就看得到
+  const byCompany = {};
+  drilldownCombinedRows.forEach(r => {
+    if (!byCompany[r.company]) byCompany[r.company] = {};
+    byCompany[r.company][r.department] = (byCompany[r.company][r.department] || 0) + (r.token_amount || 0);
+  });
+  const companies = Object.keys(byCompany).sort((a, b) => {
+    const totalA = Object.values(byCompany[a]).reduce((s, v) => s + v, 0);
+    const totalB = Object.values(byCompany[b]).reduce((s, v) => s + v, 0);
+    return totalB - totalA;
+  });
+
+  const noteEl = document.createElement('div');
+  noteEl.style.cssText = 'margin-bottom:10px; font-size:12.5px; color:var(--muted);';
+  noteEl.textContent = '點任一根部門長條，可以再往下看這個部門的token用在哪方面';
+  wrap.appendChild(noteEl);
+
+  companies.forEach(company => {
+    const deptMap = byCompany[company];
+    const depts = Object.keys(deptMap).sort((a, b) => deptMap[b] - deptMap[a]);
+    const chart = drawDrilldownBarChart(wrap, company, depts, depts.map(d => deptMap[d]), (clickedDept) => {
+      drilldownSourceView = { company, department: clickedDept };
+      renderDrilldownView();
+    });
+    if (chart) drilldownChartInstances.push(chart);
+  });
 }
 
 // 進站時檢查是否已登入
