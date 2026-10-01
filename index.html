@@ -362,13 +362,13 @@
   </div>
 
   <div class="main-tabs" id="main-tabs">
-    <button data-tab="ai-systems" class="active">大量雲端系統統計</button>
-    <button data-tab="manual-import">集團各公司統計</button>
+    <button data-tab="manual-import" class="active">集團各公司統計</button>
+    <button data-tab="ai-systems">大量雲端系統統計</button>
   </div>
 
   <div class="container">
 
-    <div class="tab-panel active" id="tab-ai-systems">
+    <div class="tab-panel" id="tab-ai-systems">
       <div class="range-tabs" id="range-tabs">
         <button data-range="today">今天</button>
         <button data-range="7" class="active">近7天</button>
@@ -450,7 +450,7 @@
       </section>
     </div>
 
-    <div class="tab-panel" id="tab-manual-import">
+    <div class="tab-panel active" id="tab-manual-import">
       <div style="display:flex; justify-content:flex-end; margin-bottom:14px;">
         <button class="btn-mini" onclick="openImportModal()">📤 上傳月報表 Excel</button>
       </div>
@@ -505,7 +505,7 @@
           <button class="btn-mini" onclick="loadManualMonth()">查詢</button>
         </div>
         <p class="import-note" style="padding:0 20px;">已合併兩種來源：公司自建AI系統（自動統計）＋ 個人工具回報（Excel匯入）。數字換算成K（千token）方便閱讀，滑鼠移到長條上可看確切數字。每家公司的部門別用量直接顯示在下面，不用點就看得到；想看某部門細分用在哪方面，點一下那根部門長條即可，上方會出現「返回」按鈕。</p>
-        <div id="company-summary-line" style="padding:4px 20px 0; font-size:14px; color:var(--text); line-height:1.8;"></div>
+        <div id="company-summary-line" style="padding:14px 20px 0;"></div>
         <div id="company-charts" style="padding:18px;"></div>
       </section>
 
@@ -604,11 +604,16 @@ async function doLogout() {
   document.getElementById('login-screen').style.display = 'flex';
 }
 
+let aiSystemsTabLoaded = false; // 「大量雲端系統統計」頁籤改成非預設頁籤，第一次切過去才載入資料
+
 function enterApp(user) {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app-screen').style.display = 'block';
   document.getElementById('user-email-label').textContent = user.email;
-  loadData();
+  // 登入後直接看「集團各公司統計」，預設帶出這個月的資料
+  const now = new Date();
+  document.getElementById('manual-month-picker').value = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  loadManualMonth();
 }
 
 // ══════════════════════════════════════════════════════════
@@ -883,6 +888,10 @@ document.getElementById('main-tabs').addEventListener('click', (e) => {
     const now = new Date();
     document.getElementById('manual-month-picker').value = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
     loadManualMonth();
+  }
+  if (btn.dataset.tab === 'ai-systems' && !aiSystemsTabLoaded) {
+    aiSystemsTabLoaded = true;
+    loadData();
   }
 });
 
@@ -1316,14 +1325,15 @@ function renderCompanySummaryLine() {
   drilldownCombinedRows.forEach(r => { byCompany[r.company] = (byCompany[r.company] || 0) + (r.token_amount || 0); });
   const companies = Object.keys(byCompany).sort((a, b) => byCompany[b] - byCompany[a]);
   const grandTotal = companies.reduce((s, c) => s + byCompany[c], 0);
-  const perCompanyText = companies
-    .map(c => `<span style="margin-right:20px; display:inline-block; margin-top:4px;"><strong style="color:var(--navy);">${escapeHtml(c)}</strong>：${fmtTokensK(byCompany[c])}</span>`)
-    .join('');
 
-  lineEl.innerHTML = `
-    <div><strong style="color:var(--navy); font-size:15px;">${escapeHtml(monthLabel)}　總計 ${fmtTokensK(grandTotal)}</strong></div>
-    <div>${perCompanyText}</div>
-  `;
+  // 比照「大量雲端系統統計」頁籤那幾張大字KPI卡片的風格，數字才夠大、夠清楚
+  const tiles = [
+    `<div class="summary-card"><div class="label">${escapeHtml(monthLabel)}　總計</div><div class="value">${fmtTokensK(grandTotal)}</div></div>`
+  ].concat(companies.map(c => `
+    <div class="summary-card"><div class="label">${escapeHtml(c)}</div><div class="value">${fmtTokensK(byCompany[c])}</div></div>
+  `));
+
+  lineEl.innerHTML = `<div class="summary-row">${tiles.join('')}</div>`;
 }
 
 function renderCompanyDrilldown(externalRows, internalRows) {
