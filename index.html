@@ -469,7 +469,7 @@
             <input type="file" id="file-input" accept=".xlsx,.xls" style="display:none;" onchange="handleFileSelect(event)" />
             <p class="import-note">
               解析規則：以「統計月份／公司／部門／姓名／使用AI名稱／方案／使用API名稱／本月token用量／導入工作應用／備註」為欄位對應；<br />
-              token用量支援 1.3B／912M／60K 這種縮寫格式，會自動換算成實際數字；<b>部門小計一律由系統自動加總同部門所有人的數字，不需要你自己先用計算機算好填進Excel</b>（如果Excel裡剛好也有填小計、且跟系統算出來的對不上，畫面上會提醒你）。
+              token用量支援 1.3B／912M／60K 這種縮寫格式，會自動換算成實際數字；<b>部門小計一律由系統自動加總同部門所有人的數字，不需要你自己先用計算機算好填進Excel</b>（如果Excel裡剛好也有填小計、且跟系統算出來的對不上，畫面上會提醒你）；<b>本月token用量沒有填的人，一律當作這個月沒有回報，系統會自動略過不列入</b>。
             </p>
             <div class="import-warning" id="import-warning"></div>
             <div class="import-summary" id="import-summary">
@@ -988,6 +988,7 @@ function parseWorkbook(workbook) {
   const rows = [];
   const deptTotals = [];
   const warnings = [];
+  let skippedNoReportCount = 0; // token沒填（視為當月沒回報）而被跳過的列數
 
   workbook.SheetNames.forEach(sheetName => {
     const ws = workbook.Sheets[sheetName];
@@ -1034,6 +1035,13 @@ function parseWorkbook(workbook) {
 
       if (!currentCompany || !currentDept) continue;
 
+      // token欄位沒填、或填了但換算出來是0，一律當作「這個人這個月沒有回報」，整列不列入（不然畫面會一堆0很亂）
+      const tokenAmount = cols.token !== undefined ? parseTokenAmount(row[cols.token]) : null;
+      if (!tokenAmount) {
+        skippedNoReportCount++;
+        continue;
+      }
+
       rows.push({
         report_month: currentMonth,
         company: String(currentCompany).trim(),
@@ -1042,13 +1050,17 @@ function parseWorkbook(workbook) {
         ai_tool_name: cols.tool !== undefined && row[cols.tool] ? String(row[cols.tool]).trim() : null,
         plan_type: cols.plan !== undefined && row[cols.plan] ? String(row[cols.plan]).trim() : null,
         api_names: cols.api !== undefined && row[cols.api] ? String(row[cols.api]).trim() : null,
-        token_amount: cols.token !== undefined ? parseTokenAmount(row[cols.token]) : null,
+        token_amount: tokenAmount,
         token_amount_raw: cols.token !== undefined && row[cols.token] != null ? String(row[cols.token]) : null,
         usage_note: cols.usage !== undefined && row[cols.usage] ? String(row[cols.usage]).trim() : null,
         remark: cols.remark !== undefined && row[cols.remark] ? String(row[cols.remark]).trim() : null,
       });
     }
   });
+
+  if (skippedNoReportCount > 0) {
+    warnings.push(`有 ${skippedNoReportCount} 筆沒有填token用量，視為當月沒有回報，已自動略過不列入`);
+  }
 
   return { rows, deptTotals, warnings };
 }
@@ -1183,9 +1195,14 @@ async function loadOrgDirectory() {
   return orgDirectoryMap;
 }
 
+let manualMonthRequestId = 0; // 每次查詢都蓋一個新編號，查完時如果已經不是最新那次查詢，就丟掉結果不更新畫面
+                               // （避免「切月份太快、舊查詢比較慢回來、反而把畫面蓋回舊月份」這種race condition）
+
 async function loadManualMonth() {
   const val = document.getElementById('manual-month-picker').value;
   if (!val) return;
+  const requestId = ++manualMonthRequestId;
+
   const reportMonth = val + '-01';
   const [y, m] = val.split('-').map(Number);
   const monthStartISO = new Date(y, m - 1, 1).toISOString();
@@ -1196,6 +1213,8 @@ async function loadManualMonth() {
     sb.from('ai_usage_events').select('asker_email, system_name, total_tokens').gte('created_at', monthStartISO).lt('created_at', monthEndISO).limit(5000),
     loadOrgDirectory(),
   ]);
+
+  if (requestId !== manualMonthRequestId) return; // 查詢期間畫面已經被更新的查詢取代，這次結果作廢，不要覆蓋畫面
 
   manualMonthRows = manualResult.error ? [] : (manualResult.data || []);
 
