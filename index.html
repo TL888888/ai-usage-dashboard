@@ -523,6 +523,7 @@
 
       <section class="panel">
         <h2>各公司部門Token分布</h2>
+        <p class="import-note" style="padding:0 20px;">此圖已合併兩種來源：公司自建AI系統（自動統計）＋ 個人工具回報（Excel匯入）。數字換算成B（十億token）方便閱讀，滑鼠移到長條上可看確切數字。點一下長條可以往下鑽看明細，上方會出現「返回」按鈕。</p>
         <div id="company-charts" style="padding:18px;"></div>
       </section>
 
@@ -762,7 +763,13 @@ const SYSTEM_LABELS = {
   wechat: '營業商務訊息',
   interview: '董事長訪談',
   qc: '品保系統',
+  secretary: '行動秘書',
+  shipping: '出貨實績系統',
 };
+
+function fmtTokensB(n) {
+  return ((n || 0) / 1e9).toFixed(3) + 'B';
+}
 
 function renderSystemTable() {
   const groups = {};
@@ -1147,21 +1154,57 @@ dropZone.addEventListener('drop', (e) => {
 // ══════════════════════════════════════════════════════════
 // 各部門月報表：查看已匯入資料
 // ══════════════════════════════════════════════════════════
-let manualMonthRows = [];      // 這個月份查回來的全部明細（未套用公司篩選）
-let manualCompanyChartInstances = [];
+let manualMonthRows = [];      // 外部個人工具：這個月份Excel匯入的全部明細（未套用公司篩選）
+let internalMonthRows = [];    // 內部系統：這個月份 ai_usage_events 依對照表轉成公司/部門後的加總列
+let orgDirectoryMap = null;    // email(小寫) -> { company, department }，只查一次、快取起來
+
+// 讀取「email對應公司/部門」對照表（org_directory），給內部系統的用量比對用
+async function loadOrgDirectory() {
+  if (orgDirectoryMap) return orgDirectoryMap;
+  orgDirectoryMap = {};
+  const { data, error } = await sb.from('org_directory').select('email, company, department');
+  if (error) {
+    console.error('讀取 org_directory 失敗:', error);
+    return orgDirectoryMap;
+  }
+  (data || []).forEach(r => {
+    orgDirectoryMap[String(r.email || '').toLowerCase()] = { company: r.company, department: r.department };
+  });
+  return orgDirectoryMap;
+}
 
 async function loadManualMonth() {
   const val = document.getElementById('manual-month-picker').value;
   if (!val) return;
   const reportMonth = val + '-01';
-  const { data, error } = await sb.from('manual_ai_usage_monthly').select('*').eq('report_month', reportMonth);
-  if (error) {
-    console.error('查詢失敗:', error);
-    manualMonthRows = [];
+  const [y, m] = val.split('-').map(Number);
+  const monthStartISO = new Date(y, m - 1, 1).toISOString();
+  const monthEndISO = new Date(y, m, 1).toISOString();
+
+  const [manualResult, internalResult, orgMap] = await Promise.all([
+    sb.from('manual_ai_usage_monthly').select('*').eq('report_month', reportMonth),
+    sb.from('ai_usage_events').select('asker_email, system_name, total_tokens').gte('created_at', monthStartISO).lt('created_at', monthEndISO).limit(5000),
+    loadOrgDirectory(),
+  ]);
+
+  manualMonthRows = manualResult.error ? [] : (manualResult.data || []);
+
+  internalMonthRows = [];
+  if (internalResult.error) {
+    console.error('查詢內部系統用量失敗:', internalResult.error);
   } else {
-    manualMonthRows = data || [];
+    (internalResult.data || []).forEach(e => {
+      const org = orgMap[String(e.asker_email || '').toLowerCase()];
+      internalMonthRows.push({
+        company: org ? org.company : '台灣',
+        department: org ? org.department : '未分類（尚未建立對照）',
+        token_amount: e.total_tokens || 0,
+        source_label: SYSTEM_LABELS[e.system_name] || e.system_name || '內部系統',
+      });
+    });
   }
-  updateCompanyFilterOptions(manualMonthRows);
+
+  updateCompanyFilterOptions([...manualMonthRows, ...internalMonthRows]);
   applyManualFilter();
 }
 
@@ -1175,18 +1218,24 @@ function updateCompanyFilterOptions(rows) {
 
 function applyManualFilter() {
   const companyFilter = document.getElementById('manual-company-filter').value;
-  const filtered = companyFilter ? manualMonthRows.filter(r => r.company === companyFilter) : manualMonthRows;
-  renderManualTables(filtered);
-  renderCompanyCharts(filtered);
+  const filteredExternal = companyFilter ? manualMonthRows.filter(r => r.company === companyFilter) : manualMonthRows;
+  const filteredInternal = companyFilter ? internalMonthRows.filter(r => r.company === companyFilter) : internalMonthRows;
+  renderManualTables(filteredExternal, filteredInternal);
+  renderCompanyDrilldown(filteredExternal, filteredInternal);
 }
 
-function renderManualTables(rows) {
-  // 一律用個人明細自動加總部門小計（不再依賴另存的小計列）
+function renderManualTables(rows, internalRows) {
+  // 一律用個人明細自動加總部門小計（不再依賴另存的小計列），並把內部系統的token一起併入小計
   const groups = {};
   rows.forEach(r => {
     const key = r.company + '|' + r.department;
     if (!groups[key]) groups[key] = { company: r.company, department: r.department, count: 0, sum: 0 };
     groups[key].count++;
+    groups[key].sum += r.token_amount || 0;
+  });
+  (internalRows || []).forEach(r => {
+    const key = r.company + '|' + r.department;
+    if (!groups[key]) groups[key] = { company: r.company, department: r.department, count: 0, sum: 0 };
     groups[key].sum += r.token_amount || 0;
   });
 
@@ -1224,70 +1273,157 @@ function renderManualTables(rows) {
   `).join('');
 }
 
-// 每家公司各畫一張長條圖：X軸=部門，Y軸=該部門token小計
-function renderCompanyCharts(rows) {
-  manualCompanyChartInstances.forEach(c => c.destroy());
-  manualCompanyChartInstances = [];
+// ══════════════════════════════════════════════════════════
+// 公司→部門→用途 三層鑽研圖表（內部系統與外部工具已合併加總）
+// ══════════════════════════════════════════════════════════
+let drilldownCombinedRows = [];  // 目前篩選範圍內的逐筆資料（已標準化成 company/department/token_amount/source_label）
+let drilldownState = { level: 'company', company: null, department: null };
+let drilldownChartInstance = null;
+
+function combineDrilldownRows(externalRows, internalRows) {
+  const combined = [];
+  externalRows.forEach(r => combined.push({
+    company: r.company,
+    department: r.department,
+    token_amount: r.token_amount || 0,
+    source_label: r.ai_tool_name || '外部工具（未填）',
+  }));
+  (internalRows || []).forEach(r => combined.push({
+    company: r.company,
+    department: r.department,
+    token_amount: r.token_amount || 0,
+    source_label: r.source_label,
+  }));
+  return combined;
+}
+
+function renderCompanyDrilldown(externalRows, internalRows) {
+  drilldownCombinedRows = combineDrilldownRows(externalRows, internalRows);
+  // 如果篩選器已經選了特定公司，直接從「部門」這層看起；否則從「公司」這層看起
+  const companyFilter = document.getElementById('manual-company-filter').value;
+  drilldownState = companyFilter
+    ? { level: 'department', company: companyFilter, department: null }
+    : { level: 'company', company: null, department: null };
+  renderDrilldownView();
+}
+
+function drilldownBack() {
+  if (drilldownState.level === 'source') {
+    drilldownState = { level: 'department', company: drilldownState.company, department: null };
+  } else if (drilldownState.level === 'department') {
+    drilldownState = { level: 'company', company: null, department: null };
+  }
+  renderDrilldownView();
+}
+
+function renderDrilldownView() {
+  if (drilldownChartInstance) { drilldownChartInstance.destroy(); drilldownChartInstance = null; }
 
   const wrap = document.getElementById('company-charts');
   wrap.innerHTML = '';
 
-  if (rows.length === 0) {
+  if (drilldownCombinedRows.length === 0) {
     wrap.innerHTML = '<div class="empty-note">沒有資料可畫圖</div>';
     return;
   }
 
-  // 依公司分組，同公司下再依部門加總
-  const byCompany = {};
-  rows.forEach(r => {
-    if (!byCompany[r.company]) byCompany[r.company] = {};
-    const dept = r.department;
-    byCompany[r.company][dept] = (byCompany[r.company][dept] || 0) + (r.token_amount || 0);
+  // 麵包屑／返回鈕
+  const crumbEl = document.createElement('div');
+  crumbEl.style.cssText = 'margin-bottom:12px; font-size:13px; color:var(--muted); display:flex; align-items:center; gap:10px; flex-wrap:wrap;';
+  if (drilldownState.level === 'company') {
+    crumbEl.innerHTML = '<strong style="color:var(--navy);">公司別總覽</strong>（點長條看部門別）';
+  } else if (drilldownState.level === 'department') {
+    crumbEl.innerHTML = `<button class="btn-mini" style="padding:4px 10px;" onclick="drilldownBack()">← 返回公司別</button><strong style="color:var(--navy);">${escapeHtml(drilldownState.company)}　部門別</strong>（點長條看用在哪方面）`;
+  } else {
+    crumbEl.innerHTML = `<button class="btn-mini" style="padding:4px 10px;" onclick="drilldownBack()">← 返回部門別</button><strong style="color:var(--navy);">${escapeHtml(drilldownState.company)} / ${escapeHtml(drilldownState.department)}　用途分布</strong>`;
+  }
+  wrap.appendChild(crumbEl);
+
+  // 依目前所在的層級，決定要用哪個欄位分組加總
+  let rowsInScope, groupKeyFn;
+  if (drilldownState.level === 'company') {
+    rowsInScope = drilldownCombinedRows;
+    groupKeyFn = r => r.company;
+  } else if (drilldownState.level === 'department') {
+    rowsInScope = drilldownCombinedRows.filter(r => r.company === drilldownState.company);
+    groupKeyFn = r => r.department;
+  } else {
+    rowsInScope = drilldownCombinedRows.filter(r => r.company === drilldownState.company && r.department === drilldownState.department);
+    groupKeyFn = r => r.source_label;
+  }
+
+  const totals = {};
+  rowsInScope.forEach(r => {
+    const key = groupKeyFn(r) || '未填';
+    totals[key] = (totals[key] || 0) + (r.token_amount || 0);
   });
+  const labels = Object.keys(totals).sort((a, b) => totals[b] - totals[a]);
+  const grandTotal = labels.reduce((s, l) => s + totals[l], 0);
 
-  const CHART_COLOR = '#2563eb';
+  const levelTitle = { company: '各公司', department: '各部門', source: '各用途' }[drilldownState.level];
+  const card = document.createElement('div');
+  card.className = 'chart-card';
+  card.innerHTML = `
+    <h3>${levelTitle}Token用量　<span style="color:var(--muted);font-weight:400;font-size:12.5px;">總計 ${fmtTokensB(grandTotal)}</span></h3>
+    <div class="chart-wrap" style="height:${Math.max(220, labels.length * 42)}px;"><canvas id="drilldown-canvas"></canvas></div>
+  `;
+  wrap.appendChild(card);
 
-  Object.entries(byCompany).forEach(([company, deptMap], idx) => {
-    const depts = Object.keys(deptMap).sort((a, b) => deptMap[b] - deptMap[a]);
-    const totalTokens = depts.reduce((s, d) => s + deptMap[d], 0);
+  if (labels.length === 0) {
+    card.querySelector('.chart-wrap').innerHTML = '<div class="empty-note">沒有資料</div>';
+    return;
+  }
 
-    const card = document.createElement('div');
-    card.className = 'chart-card';
-    card.innerHTML = `
-      <h3>${escapeHtml(company)}　<span style="color:var(--muted);font-weight:400;font-size:12.5px;">總計 ${fmtInt(totalTokens)} tokens</span></h3>
-      <div class="chart-wrap"><canvas id="chart-canvas-${idx}"></canvas></div>
-    `;
-    wrap.appendChild(card);
-
-    try {
-      if (typeof Chart === 'undefined') throw new Error('Chart.js 尚未載入');
-      const ctx = card.querySelector('canvas').getContext('2d');
-      const chart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-          labels: depts,
-          datasets: [{
-            label: 'Token用量',
-            data: depts.map(d => deptMap[d]),
-            backgroundColor: CHART_COLOR,
-            borderRadius: 4,
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: { legend: { display: false } },
-          scales: {
-            y: { beginAtZero: true, ticks: { callback: (v) => fmtInt(v) } }
+  try {
+    if (typeof Chart === 'undefined') throw new Error('Chart.js 尚未載入');
+    const ctx = card.querySelector('canvas').getContext('2d');
+    const CHART_COLOR = '#2563eb';
+    const canDrillFurther = drilldownState.level !== 'source';
+    drilldownChartInstance = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Token用量',
+          data: labels.map(l => totals[l]),
+          backgroundColor: CHART_COLOR,
+          borderRadius: 4,
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => `${fmtInt(ctx.raw)} tokens（約 ${fmtTokensB(ctx.raw)}）`
+            }
           }
+        },
+        scales: {
+          x: { beginAtZero: true, ticks: { callback: (v) => fmtTokensB(v) } }
+        },
+        onClick: (evt, elements) => {
+          if (!canDrillFurther || !elements.length) return;
+          const clickedLabel = labels[elements[0].index];
+          if (drilldownState.level === 'company') {
+            drilldownState = { level: 'department', company: clickedLabel, department: null };
+          } else if (drilldownState.level === 'department') {
+            drilldownState = { level: 'source', company: drilldownState.company, department: clickedLabel };
+          }
+          renderDrilldownView();
+        },
+        onHover: (evt, elements) => {
+          evt.native.target.style.cursor = (canDrillFurther && elements.length) ? 'pointer' : 'default';
         }
-      });
-      manualCompanyChartInstances.push(chart);
-    } catch (e) {
-      console.error('畫圖表失敗:', company, e);
-      card.querySelector('.chart-wrap').innerHTML = '<div style="color:var(--muted);font-size:12.5px;padding:20px 0;">圖表載入失敗，請重新整理頁面再試一次</div>';
-    }
-  });
+      }
+    });
+  } catch (e) {
+    console.error('畫圖表失敗:', e);
+    card.querySelector('.chart-wrap').innerHTML = '<div style="color:var(--muted);font-size:12.5px;padding:20px 0;">圖表載入失敗，請重新整理頁面再試一次</div>';
+  }
 }
 
 // 進站時檢查是否已登入
