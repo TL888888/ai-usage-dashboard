@@ -1379,6 +1379,37 @@ function renderDrilldownView() {
     const ctx = card.querySelector('canvas').getContext('2d');
     const CHART_COLOR = '#2563eb';
     const canDrillFurther = drilldownState.level !== 'source';
+
+    // 直接把數字標在長條上：長條夠長就標在長條尾端外面（深色字），
+    // 長條太短（數字很小、光看長度看不出來）就改標在長條裡面靠右（白字），確保每一條都看得到確切數字
+    const drilldownDataLabelsPlugin = {
+      id: 'drilldownDataLabels',
+      afterDatasetsDraw(chartInstance) {
+        const { ctx: c, chartArea } = chartInstance;
+        const meta = chartInstance.getDatasetMeta(0);
+        const values = chartInstance.data.datasets[0].data;
+        c.save();
+        c.font = '600 12px -apple-system, "Microsoft JhengHei", "PingFang TC", sans-serif';
+        c.textBaseline = 'middle';
+        meta.data.forEach((bar, idx) => {
+          const label = fmtTokensB(values[idx]);
+          const textWidth = c.measureText(label).width;
+          const pos = bar.tooltipPosition();
+          const fitsOutside = pos.x + 8 + textWidth <= chartArea.right;
+          if (fitsOutside) {
+            c.fillStyle = '#1f2937';
+            c.textAlign = 'left';
+            c.fillText(label, pos.x + 8, pos.y);
+          } else {
+            c.fillStyle = '#ffffff';
+            c.textAlign = 'right';
+            c.fillText(label, pos.x - 8, pos.y);
+          }
+        });
+        c.restore();
+      }
+    };
+
     drilldownChartInstance = new Chart(ctx, {
       type: 'bar',
       data: {
@@ -1390,10 +1421,14 @@ function renderDrilldownView() {
           borderRadius: 4,
         }]
       },
+      plugins: [drilldownDataLabelsPlugin],
       options: {
         indexAxis: 'y',
         responsive: true,
         maintainAspectRatio: false,
+        layout: { padding: { right: 50 } },
+        // 滑鼠移到「整排」（不用剛好疊在細長條上）就會顯示提示框，避免數字很小、長條細到點不到的問題
+        interaction: { mode: 'nearest', axis: 'y', intersect: false },
         plugins: {
           legend: { display: false },
           tooltip: {
