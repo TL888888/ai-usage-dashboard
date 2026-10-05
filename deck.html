@@ -714,7 +714,7 @@ if (typeof module !== 'undefined') module.exports = CORE;
   window.__aiReport = { importBuffer: async (buf, name) => importFiles([{ name: name || 'test.xlsx', arrayBuffer: async () => buf }]), state };
 
   function init2() { const ms = listMonths(state.records); state.month = ms[ms.length - 1]; state.compare = !!prevMonthOf(state.records, state.month); }
-  if (DASHBOARD) { document.body.classList.add('dash'); }
+  if (DASHBOARD) { document.body.classList.add('dash'); const sm = document.querySelector('.brand small'); if (sm) sm.textContent = '資料來自「集團各公司統計」匯入的月報表'; }
   else { init(); init2(); }
   window.AiReport = {
     setDbRows(rows) {

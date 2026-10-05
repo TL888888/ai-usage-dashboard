@@ -1,0 +1,11 @@
+{
+  "name": "ai-usage-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "AI用量統計。index.html/deck.html 為靜態頁面;api/auto-import.js 是每月自動上傳的伺服器端入口",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "xlsx": "^0.18.5"
+  }
+}
