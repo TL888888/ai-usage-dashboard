@@ -1,0 +1,735 @@
+<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"></head><body>
+<title>集團AI使用月報</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<style>
+/* 版面概念:像一份「每頁一個結論」的簡報,但可以上傳 Excel 即時更新。
+   色彩:冷灰底、深藍墨色文字;藍色=本月、淡藍=上月、橘色=「沒有 tokens 的使用者」。 */
+:root {
+  --bg: #eef1f4;
+  --surface: #ffffff;
+  --ink: #14212e;
+  --ink2: #44556a;
+  --muted: #6f7e8e;
+  --line: #dde3e9;
+  --accent: #2a78d6;        /* 本月 */
+  --accent-soft: #cde2fb;
+  --prev: #9ec5f4;          /* 上月 */
+  --warm: #eb6834;          /* 沒有 tokens 的使用者 */
+  --good: #1a7f4b;
+  --bad: #c2372f;
+  --warnbg: #fff4e0;
+  --warnink: #8a5300;
+  --tip-bg: #14212e;
+  --tip-ink: #ffffff;
+  --font: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0f1720; --surface: #17212c; --ink: #eaf0f6; --ink2: #b3c0cf; --muted: #8696a8; --line: #2a3745;
+    --accent: #3987e5; --accent-soft: #1c3350; --prev: #1c5cab; --warm: #d95926;
+    --good: #4cc38a; --bad: #ff8a80; --warnbg: #2c2412; --warnink: #f0c36d; --tip-bg: #eaf0f6; --tip-ink: #14212e;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0f1720; --surface: #17212c; --ink: #eaf0f6; --ink2: #b3c0cf; --muted: #8696a8; --line: #2a3745;
+  --accent: #3987e5; --accent-soft: #1c3350; --prev: #1c5cab; --warm: #d95926;
+  --good: #4cc38a; --bad: #ff8a80; --warnbg: #2c2412; --warnink: #f0c36d; --tip-bg: #eaf0f6; --tip-ink: #14212e;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 15px; line-height: 1.6; padding-inline: 16px; padding-block: 0 48px; font-variant-numeric: tabular-nums; }
+.wrap { max-width: 1040px; margin-inline: auto; }
+h1, h2, h3, p { margin: 0; }
+button, select, input { font: inherit; color: inherit; }
+
+/* ---- 控制列 ---- */
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 14px 12px; border-bottom: 1px solid var(--line); margin-inline: -16px; padding-inline: 16px; }
+.bar-in { max-width: 1040px; margin-inline: auto; display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; }
+.brand { font-weight: 700; font-size: 17px; margin-right: auto; min-width: 0; }
+.brand small { display: block; font-weight: 400; font-size: 12px; color: var(--muted); }
+.ctl { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.btn { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 7px 13px; cursor: pointer; min-height: 36px; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 500; }
+.btn:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+select { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; min-height: 36px; }
+.switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+.switch input { width: 18px; height: 18px; accent-color: var(--accent); }
+.switch.off { opacity: .45; cursor: not-allowed; }
+.status { font-size: 13px; color: var(--ink2); min-height: 20px; padding-top: 8px; max-width: 1040px; margin-inline: auto; }
+.status.err { color: var(--bad); }
+
+/* ---- 簡報頁 ---- */
+.deck { display: flex; flex-direction: column; gap: 20px; padding-block: 20px; }
+.slide { scroll-margin-top: 96px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 28px clamp(18px, 4vw, 40px) 30px; min-width: 0; }
+.kicker { font-size: 12.5px; letter-spacing: .08em; color: var(--muted); text-transform: uppercase; margin-bottom: 6px; }
+.slide h2 { font-size: clamp(20px, 3.4vw, 28px); line-height: 1.3; font-weight: 700; text-wrap: balance; margin-bottom: 6px; }
+.lede { color: var(--ink2); margin-bottom: 22px; max-width: 70ch; }
+.note { color: var(--muted); font-size: 12.5px; margin-top: 16px; max-width: 80ch; }
+.cover h1 { font-size: clamp(30px, 6vw, 50px); line-height: 1.15; font-weight: 700; margin-block: 4px 8px; }
+.cover .sub { color: var(--ink2); font-size: 16px; margin-bottom: 24px; }
+
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 18px; }
+.kpi { border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+.kpi .v { font-size: 30px; font-weight: 700; line-height: 1.15; }
+.kpi .l { font-size: 13px; color: var(--ink2); }
+.kpi .d { font-size: 12.5px; margin-top: 4px; color: var(--muted); min-height: 19px; }
+.d.up { color: var(--good); } .d.down { color: var(--bad); }
+.takeaway { border-left: 3px solid var(--accent); padding: 4px 0 4px 14px; color: var(--ink); max-width: 75ch; }
+
+/* ---- 長條圖(HTML 畫) ---- */
+.hbars { display: flex; flex-direction: column; gap: 14px; }
+.hrow { display: grid; grid-template-columns: minmax(80px, 150px) 1fr minmax(70px, auto); gap: 6px 12px; align-items: center; }
+.hrow .lab { font-size: 14px; min-width: 0; overflow-wrap: anywhere; }
+.hrow .val { font-size: 14px; font-weight: 500; text-align: right; white-space: nowrap; }
+.hrow .lab .sub { font-size: 12px; color: var(--muted); }
+.flag { color: var(--warm); font-weight: 500; }
+.h3 { font-size: 15px; font-weight: 500; margin: 26px 0 8px; }
+.hrow .val small { display: block; font-weight: 400; font-size: 12px; color: var(--muted); }
+.track { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.bar-seg { height: 14px; border-radius: 0 4px 4px 0; background: var(--accent); min-width: 2px; }
+.bar-seg.prev { background: var(--prev); height: 9px; }
+.stack { display: flex; height: 18px; gap: 2px; }
+.stack > span { display: block; height: 100%; min-width: 0; }
+.stack > span:first-child { border-radius: 0 0 0 0; }
+.stack .s-a { background: var(--accent); }
+.stack .s-b { background: var(--warm); }
+.stack .s-c { background: var(--accent-soft); border: 1px solid var(--accent); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--ink2); margin-bottom: 14px; }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: 6px; }
+.hit:hover { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.hrow.hit { border-radius: 6px; padding-block: 3px; }
+
+/* ---- 表格 ---- */
+.tablebox { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 500; color: var(--ink2); background: color-mix(in srgb, var(--ink) 3%, var(--surface)); white-space: nowrap; }
+td.n, th.n { text-align: right; white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+.heat td.c { text-align: center; min-width: 64px; }
+.heat .zero { color: var(--muted); }
+
+/* ---- 案例卡 ---- */
+.cases { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.case { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; min-width: 0; }
+.case .who { font-size: 12.5px; color: var(--muted); margin-bottom: 4px; }
+.case .what { overflow-wrap: anywhere; }
+
+/* ---- 提醒 ---- */
+.warns { display: flex; flex-direction: column; gap: 8px; }
+.warn { background: var(--warnbg); color: var(--warnink); border-radius: 8px; padding: 10px 14px; font-size: 14px; overflow-wrap: anywhere; }
+.warn.info { background: color-mix(in srgb, var(--accent) 10%, var(--surface)); color: var(--ink2); }
+.warn b { font-weight: 700; margin-right: 6px; }
+
+/* ---- 空狀態 ---- */
+.empty { text-align: left; }
+.empty ol { margin: 10px 0 18px; padding-left: 22px; color: var(--ink2); }
+.demo-banner { background: var(--warnbg); color: var(--warnink); border-radius: 8px; padding: 8px 14px; font-size: 13.5px; margin-top: 16px; }
+
+/* ---- 提示泡泡 ---- */
+#tip { position: fixed; z-index: 50; pointer-events: none; background: var(--tip-bg); color: var(--tip-ink); font-size: 13px; padding: 6px 10px; border-radius: 6px; max-width: 280px; display: none; line-height: 1.45; }
+
+/* ---- 簡報模式 ---- */
+body.present { padding: 0; overflow: hidden; }
+body.present .bar, body.present .status, body.present .nopresent { display: none !important; }
+body.present .deck { display: block; padding: 0; }
+body.present .slide { display: none; position: fixed; inset: 0; border-radius: 0; border: 0; overflow-y: auto; padding: clamp(24px, 5vw, 64px) clamp(24px, 7vw, 100px); font-size: 17px; }
+body.present .slide.current { display: block; }
+body.present .slide h2 { font-size: clamp(26px, 3.6vw, 40px); }
+body.present .cover h1 { font-size: clamp(40px, 7vw, 72px); }
+body.dash #fileBtn, body.dash #clearBtn, body.dash .status { display: none !important; }
+.pnav { display: none; }
+body.present .pnav { display: flex; position: fixed; z-index: 20; right: 14px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); gap: 8px; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px; font-size: 13px; color: var(--ink2); }
+.pnav button { background: none; border: 0; cursor: pointer; padding: 4px 10px; border-radius: 6px; }
+.pnav button:hover { background: var(--bg); }
+
+@media (max-width: 560px) {
+  .hrow { grid-template-columns: 1fr minmax(60px, auto); }
+  .hrow .track { grid-column: 1 / -1; order: 3; }
+  .kpi .v { font-size: 26px; }
+}
+@media (prefers-reduced-motion: no-preference) { .bar-seg, .stack > span { transition: width .35s ease; } }
+</style>
+
+<div class="bar"><div class="bar-in">
+  <div class="brand">集團 AI 使用月報<small>經營會議簡報:已載入 8、9 月資料,每月匯入新 Excel 即可更新</small></div>
+  <div class="ctl"><label class="btn primary" for="file" id="fileBtn" tabindex="0">匯入 Excel</label><input id="file" type="file" accept=".xlsx,.xls" multiple hidden></div>
+  <div class="ctl"><label for="month" style="color:var(--ink2);font-size:13px">月份</label><select id="month" disabled></select></div>
+  <label class="switch off" id="cmpWrap"><input type="checkbox" id="cmp" disabled><span id="cmpText">與上個月比較</span></label>
+  <button class="btn" id="presentBtn" disabled>簡報模式</button>
+  <button class="btn" id="clearBtn" disabled>還原內建資料</button>
+</div></div>
+<div class="status" id="status" role="status"></div>
+<div class="wrap"><main class="deck" id="deck"></main></div>
+<div class="pnav" id="pnav"><button id="pPrev" aria-label="上一頁">◀</button><span id="pCount"></span><button id="pNext" aria-label="下一頁">▶</button><button id="pExit">結束簡報</button></div>
+<div id="tip"></div>
+
+<script>
+/* ============================================================
+ * AI用量月報 — 資料處理核心(不碰畫面,可單獨在 Node 測試)
+ *
+ * 輸入:各公司每月填報的 Excel(固定格式:統計月份/公司/部門/姓名/使用AI名稱/方案/使用API名稱/本月token用量/導入工作應用/備註)
+ * 輸出:標準化後的紀錄、各月份彙總、資料品質提醒
+ *
+ * 給接手的人:要調整公司名稱對照、AI工具名稱對照、工作應用分類,只需要改下面三個設定區塊,不用動其他程式。
+ * ============================================================ */
+
+// ---------- 設定區 1:公司名稱對照(填報人寫法不一,統一成同一個公司名) ----------
+// 由上往下比對,符合的第一條就採用。找不到符合時,直接使用填報的公司名稱(簡體會自動轉繁體)。
+const COMPANY_ALIASES = [
+  [/昆山|硕量|碩量|东莞|東莞/, '碩量'],
+  [/涟水|漣水/, '漣水'],
+  [/南京/, '南京'],
+  [/台[灣湾]|臺[灣湾]/, '台灣']
+];
+
+// ---------- 設定區 1b:簡報上顯示的公司全名(左邊是上面標準化後的名稱) ----------
+const COMPANY_DISPLAY = { '台灣': '台灣大量', '南京': '南京大量', '漣水': '漣水大量', '碩量': '碩量(昆山東莞)' };
+const disp = c => COMPANY_DISPLAY[c] || c;
+
+// ---------- 設定區 2:AI工具名稱對照(小寫、去空白後比對)----------
+const TOOL_ALIASES = {
+  'chatgpt': 'ChatGPT', 'gpt': 'ChatGPT', 'openai': 'ChatGPT',
+  'claude': 'Claude', 'claudecode': 'Claude', 'claudecli': 'Claude',
+  'gemini': 'Gemini', 'notebooklm': 'NotebookLM', 'notebookllm': 'NotebookLM',
+  'deepseek': 'DeepSeek', 'deppseek': 'DeepSeek', 'deepsesk': 'DeepSeek',
+  'cursor': 'Cursor', 'codex': 'Codex', 'copilot': 'Copilot', 'githubcopilot': 'Copilot',
+  '豆包': '豆包', '千問': '千問', 'qwen': '千問', 'kimi': 'Kimi', 'kimiai': 'Kimi',
+  '元寶': '元寶', 'minimax': 'MiniMax', 'mimo': 'MiMo', 'workbuddy': 'WorkBuddy', 'codebuddy': 'CodeBuddy',
+  'qclaw': 'QClaw', 'codequery': 'CodeQuery', '聽腦': '聽腦', 'grok': 'Grok'
+};
+
+// ---------- 設定區 3:工作應用分類(關鍵字,一筆應用可以同時屬於多類)----------
+const PURPOSE_CATEGORIES = [
+  ['資料查詢與研究', /查詢|查询|搜尋|搜索|檢索|研究|諮詢|咨詢|問答|法規|法规|尋源|寻源|資料|资料|信息|情報|學習|学习|了解|了解/],
+  ['文件與文書處理', /文件|文檔|文档|文書|文书|報告|报告|整理|摘要|會議|会议|紀要|纪要|記錄|PPT|簡報|简报|表格|excel|word|合約|合同|信件|郵件|邮件/i],
+  ['翻譯與語言', /翻譯|翻译|語言|语言|英文|日文|多語/],
+  ['程式與軟體開發', /開發|开发|程式|程序|代碼|代码|coding|code|軟體|软件|腳本|脚本|python|vba|網頁|网页|ilogic|vb/i],
+  ['數據分析與報表', /數據|数据|分析|報表|报表|統計|统计|優化|优化|bom|函數|函数/i],
+  ['流程自動化', /自動|自动|一鍵|一键|批次|批量|rpa|agent|工作流|流程|整合|整合/i],
+  ['客戶與商務溝通', /客戶|客户|營業|营业|商務|商务|行銷|营销|報價|报价|詢價|询价|回覆|回复/],
+  ['設計與影音', /設計|设计|圖像|图像|繪圖|绘图|影片|视频|海報|海报|音訊|音频/]
+];
+// 判斷「自動化/進階應用」案例用的關鍵字(簡報裡「自動化案例」那一頁)
+const AUTOMATION_RE = /自動|自动|一鍵|一键|批次|批量|rpa|agent|工作流|腳本|脚本|ilogic|vba|整合/i;
+
+// ---------- 簡體轉繁體(只轉常見的公司/部門/工具/應用用字,姓名不轉)----------
+const S2T_PAIRS = '涟漣硕碩营營业業务務资資财財产產总總门門质質经經体體术術宝寶关關发發应應纪紀录錄统統计計设設备備护護检檢验驗认認证證买買卖賣销銷户戶订訂单單种種类類电電脑腦软軟库庫图圖络絡网網动動态態视視频頻译譯议議论論让讓问問说說谢謝请請对對话話题題现現实實际際规規划劃试試测測报報处處员員联聯积積开開与與专專长長车車东東进進时時间間会會档檔询詢码碼简簡库庫资資寻尋导導应應该該贸貿资資仓倉储儲运運输輸购購货貨据據数數点點输輸出出库庫维維修修产產线線料料师師务務厂廠区區协協调調学學习習觉覺听聽认認确確绩績实實别別则則读讀写寫复復杂雜样樣线線结結构構优優势勢项項题題节節约約为為与與这這个個们們来來过過还還没沒从從发發现現让讓将將对對';
+const S2T = (() => { const m = {}; for (let i = 0; i + 1 < S2T_PAIRS.length; i += 2) m[S2T_PAIRS[i]] = S2T_PAIRS[i + 1]; return m; })();
+const toTrad = s => String(s == null ? '' : s).replace(/[一-鿿]/g, ch => S2T[ch] || ch);
+const clean = s => String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
+
+// ---------- token 數字解析(1B / 935.4K / 770M / 純數字 / 1.5萬 / 「A+B」相加)----------
+const UNIT = { '': 1, K: 1e3, M: 1e6, B: 1e9, G: 1e9, '萬': 1e4, '万': 1e4, '億': 1e8, '亿': 1e8 };
+function parseOneToken(s) {
+  const m = s.replace(/,/g, '').trim().match(/^([\d.]+)\s*([KkMmBbGg萬万億亿]?)\s*(?:tokens?)?$/i);
+  if (!m) return null;
+  const mult = UNIT[m[2].toUpperCase()] ?? UNIT[m[2]];
+  const n = parseFloat(m[1]);
+  return isNaN(n) || mult == null ? null : n * mult;
+}
+function parseTokens(v) {
+  if (v === '' || v == null) return { n: null, raw: '' };
+  if (typeof v === 'number') return { n: v, raw: String(v) };
+  const raw = clean(v);
+  if (!raw) return { n: null, raw: '' };
+  const parts = raw.split('+');
+  let sum = 0;
+  for (const p of parts) {
+    const n = parseOneToken(p);
+    if (n == null) return { n: null, raw, bad: true };
+    sum += n;
+  }
+  return { n: sum, raw };
+}
+
+// ---------- 月份 ----------
+function monthFromCell(v) {
+  if (v === '' || v == null) return '';
+  if (typeof v === 'number') {
+    const d = new Date(Math.round((v - 25569) * 86400 * 1000));
+    return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0');
+  }
+  const m = String(v).trim().match(/(\d{4})\D+(\d{1,2})/);
+  return m ? m[1] + '-' + m[2].padStart(2, '0') : '';
+}
+function monthLabel(ym) { const [y, m] = ym.split('-'); return `${y}年${parseInt(m, 10)}月`; }
+function monthShort(ym) { return `${parseInt(ym.split('-')[1], 10)}月`; }
+
+// ---------- 名稱標準化 ----------
+function normCompany(raw, sheetName) {
+  const t = toTrad(clean(raw));
+  for (const [re, name] of COMPANY_ALIASES) if (re.test(raw) || re.test(t)) return name;
+  if (t) return t;
+  const s = toTrad(clean(sheetName).replace(/\d+\s*月.*$/, ''));
+  for (const [re, name] of COMPANY_ALIASES) if (re.test(s)) return name;
+  return s || '(未填公司)';
+}
+function normTool(s) {
+  const key = s.toLowerCase().replace(/[\s\-_.]/g, '');
+  if (TOOL_ALIASES[key]) return TOOL_ALIASES[key];
+  return s.length > 0 ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
+function splitTools(raw) {
+  const t = toTrad(clean(raw));
+  if (!t) return [];
+  const out = [];
+  for (const part of t.split(/[\/、,，;；&＋+]|\s+and\s+/i)) {
+    const p = clean(part);
+    if (p) out.push(normTool(p));
+  }
+  return [...new Set(out)];
+}
+function normPlan(raw) {
+  const t = toTrad(clean(raw));
+  if (!t) return '(未填)';
+  if (/免費|免费|free/i.test(t)) return '免費';
+  if (/年/.test(t)) return '年費';
+  if (/月/.test(t)) return '月費';
+  if (/額度|额度|token|API|量/i.test(t)) return 'Token額度制';
+  return t;
+}
+function classifyPurpose(text) {
+  const t = toTrad(text);
+  return PURPOSE_CATEGORIES.filter(([, re]) => re.test(t)).map(([name]) => name);
+}
+
+// ---------- 讀 Excel ----------
+const HEADER_KEYS = [
+  ['month', /統計月份|统计月份/],
+  ['company', /^公司/],
+  ['dept', /^部門|^部门/],
+  ['person', /^姓名/],
+  ['tool', /使用\s*AI/i],
+  ['plan', /^方案/],
+  ['api', /使用\s*API/i],
+  ['tokens', /token/i],
+  ['purpose', /導入工作應用|导入工作应用|工作應用|工作应用/],
+  ['note', /^備註|^备注/]
+];
+
+/** XLSX:SheetJS 模組;wb:XLSX.read 的結果;回傳 { records, info } */
+function parseWorkbook(XLSX, wb) {
+  const records = [];
+  const info = { subtotalRows: 0, sheets: [], monthMismatch: [], skippedSheets: [] };
+  // 先找出整本活頁簿的主要年份(工作表名稱只有「8月」沒有年份時使用)
+  const yearVotes = {};
+  for (const name of wb.SheetNames) {
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: '' });
+    rows.slice(0, 60).forEach(r => r.forEach(c => { const mm = monthFromCell(c); if (mm && typeof c === 'number' && c > 40000) yearVotes[mm.slice(0, 4)] = (yearVotes[mm.slice(0, 4)] || 0) + 1; }));
+  }
+  const domYear = Object.entries(yearVotes).sort((a, b) => b[1] - a[1])[0]?.[0] || String(new Date().getFullYear());
+
+  for (const name of wb.SheetNames) {
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: '' });
+    let hdr = -1;
+    for (let i = 0; i < Math.min(rows.length, 30); i++) {
+      const joined = rows[i].map(c => String(c)).join('|');
+      if (/統計月份|统计月份/.test(joined) && /公司/.test(joined)) { hdr = i; break; }
+    }
+    if (hdr < 0) { info.skippedSheets.push(name); continue; }
+    const col = {};
+    rows[hdr].forEach((c, ci) => {
+      const t = String(c).replace(/\s+/g, '');
+      for (const [key, re] of HEADER_KEYS) if (col[key] == null && re.test(t)) { col[key] = ci; break; }
+    });
+    const sm = name.match(/(\d{1,2})\s*月/);
+    const sheetMonth = sm ? `${domYear}-${sm[1].padStart(2, '0')}` : '';
+    let n = 0;
+    for (let i = hdr + 1; i < rows.length; i++) {
+      const r = rows[i];
+      const g = k => (col[k] == null ? '' : r[col[k]]);
+      const dept = clean(g('dept')), person = clean(g('person')), toolRaw = clean(g('tool'));
+      const tok = parseTokens(g('tokens'));
+      const purpose = clean(g('purpose'));
+      const hasAny = [g('company'), dept, person, toolRaw, g('tokens'), purpose].some(x => clean(x));
+      if (!hasAny) continue;
+      // 小計列:沒有部門、姓名、工具,只有一個數字(部門合計)。不計入,避免重複計算。
+      if (!dept && !person && !toolRaw) { info.subtotalRows++; continue; }
+      const cellMonth = monthFromCell(g('month'));
+      const month = sheetMonth || cellMonth;
+      if (!month) continue;
+      if (sheetMonth && cellMonth && cellMonth !== sheetMonth) info.monthMismatch.push({ sheet: name, row: i + 1, cellMonth, sheetMonth, person });
+      const tools = splitTools(toolRaw);
+      records.push({
+        month, company: normCompany(clean(g('company')), name), dept: toTrad(dept) || '(未填部門)',
+        person: person, tools, toolRaw: toTrad(toolRaw), plan: normPlan(g('plan')), api: toTrad(clean(g('api'))),
+        tokens: tok.n, tokensRaw: tok.raw, tokenBad: !!tok.bad,
+        purpose: toTrad(purpose), cats: classifyPurpose(purpose), isAuto: AUTOMATION_RE.test(toTrad(purpose)),
+        note: toTrad(clean(g('note'))), src: `${name}#${i + 1}`
+      });
+      n++;
+    }
+    info.sheets.push({ name, rows: n, month: sheetMonth });
+  }
+  return { records, info };
+}
+
+// ---------- 彙總 ----------
+const personKey = r => `${r.company}|${r.dept}|${r.person}`;
+function addTo(map, key, val) { if (!map.has(key)) map.set(key, new Set()); map.get(key).add(val); }
+
+function summarizeCompany(rows) {
+  const persons = new Map(); // key -> {rows}
+  rows.forEach(r => { const k = personKey(r); if (!persons.has(k)) persons.set(k, []); persons.get(k).push(r); });
+  const depts = new Set(rows.map(r => r.dept));
+  const tools = new Map(), cats = new Map();
+  let tokenPeople = 0, purposePeople = 0, paidPeople = 0, tokens = 0, badTokens = 0;
+  for (const [k, rs] of persons) {
+    if (rs.some(r => r.tokens != null)) tokenPeople++;
+    if (rs.some(r => r.purpose)) purposePeople++;
+    if (rs.some(r => r.plan !== '免費' && r.plan !== '(未填)')) paidPeople++;
+    rs.forEach(r => { if (r.tokens != null) tokens += r.tokens; if (r.tokenBad) badTokens++; r.tools.forEach(t => addTo(tools, t, k)); r.cats.forEach(c => addTo(cats, c, k)); });
+  }
+  return {
+    people: persons.size, depts: depts.size, tokenPeople, noTokenPeople: persons.size - tokenPeople,
+    purposePeople, paidPeople, freePeople: persons.size - paidPeople, tokens, badTokens,
+    tools: Object.fromEntries([...tools].map(([k, v]) => [k, v.size])),
+    cats: Object.fromEntries([...cats].map(([k, v]) => [k, v.size]))
+  };
+}
+function summarizeMonth(records, month) {
+  const rows = records.filter(r => r.month === month);
+  const companies = [...new Set(rows.map(r => r.company))];
+  const byCompany = {};
+  companies.forEach(c => { byCompany[c] = summarizeCompany(rows.filter(r => r.company === c)); });
+  const all = summarizeCompany(rows);
+  all.companies = companies.length;
+  return { month, rows, companies, byCompany, all };
+}
+function listMonths(records) { return [...new Set(records.map(r => r.month))].sort(); }
+function prevMonthOf(records, month) { const ms = listMonths(records).filter(m => m < month); return ms.length ? ms[ms.length - 1] : null; }
+
+// ---------- 部門明細 ----------
+function deptDetail(rows) {
+  const out = new Map();
+  rows.forEach(r => { const k = r.company + '|' + r.dept; if (!out.has(k)) out.set(k, []); out.get(k).push(r); });
+  return [...out].map(([k, rs]) => {
+    const s = summarizeCompany(rs);
+    const topCats = Object.entries(s.cats).sort((a, b) => b[1] - a[1]).slice(0, 3).map(e => e[0]);
+    const topTools = Object.entries(s.tools).sort((a, b) => b[1] - a[1]).slice(0, 3).map(e => e[0]);
+    return { company: rs[0].company, dept: rs[0].dept, people: s.people, tokenPeople: s.tokenPeople, tokens: s.tokens, topCats, topTools };
+  }).sort((a, b) => a.company.localeCompare(b.company, 'zh-Hant') || b.people - a.people);
+}
+
+// ---------- tokens 在哪些部門、用在哪裡 ----------
+function topPhrases(rows, n) {
+  const cnt = {};
+  rows.forEach(r => String(r.purpose || '').split(/[，,、；;。\/]+/).map(clean).filter(p => p.length >= 2).forEach(p => { cnt[p] = (cnt[p] || 0) + 1; }));
+  return Object.entries(cnt).sort((a, b) => b[1] - a[1]).slice(0, n).map(e => e[0]);
+}
+function tokenDepts(rows) {
+  const g = new Map();
+  rows.filter(r => r.tokens != null).forEach(r => { const k = r.company + '|' + r.dept; if (!g.has(k)) g.set(k, []); g.get(k).push(r); });
+  return [...g].map(([k, rs]) => {
+    const tools = new Map(); rs.forEach(r => r.tools.forEach(t => tools.set(t, (tools.get(t) || 0) + 1)));
+    return { company: rs[0].company, dept: rs[0].dept, tokens: rs.reduce((a, r) => a + r.tokens, 0), people: new Set(rs.map(personKey)).size,
+      purposes: topPhrases(rs, 4), tools: [...tools].sort((a, b) => b[1] - a[1]).slice(0, 3).map(e => e[0]) };
+  }).sort((a, b) => b.tokens - a.tokens);
+}
+function tokenByCategory(rows) {
+  const out = {};
+  rows.filter(r => r.tokens != null && r.tokens > 0).forEach(r => {
+    const cats = r.cats.length ? r.cats : ['其他(未註明用途)'];
+    cats.forEach(c => { out[c] = (out[c] || 0) + r.tokens / cats.length; });
+  });
+  return Object.entries(out).map(([cat, tokens]) => ({ cat, tokens })).sort((a, b) => b.tokens - a.tokens);
+}
+
+// ---------- 自動化案例 ----------
+function automationCases(rows) {
+  const seen = new Set(), out = [];
+  rows.filter(r => r.isAuto).forEach(r => {
+    const key = r.company + r.dept + r.purpose;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ company: r.company, dept: r.dept, tool: r.toolRaw, purpose: r.purpose });
+  });
+  return out;
+}
+
+// ---------- 資料品質提醒 ----------
+function buildWarnings(records, month, prev, info) {
+  const w = [];
+  const cur = summarizeMonth(records, month);
+  if (info && info.subtotalRows) w.push({ level: 'info', text: `已自動排除 ${info.subtotalRows} 列「小計」(沒有部門、姓名,只有一個數字的列),避免 tokens 重複計算。` });
+  if (info && info.monthMismatch.length) w.push({ level: 'warn', text: `有 ${info.monthMismatch.length} 列的「統計月份」與工作表月份不一致,已以工作表月份為準:` + info.monthMismatch.slice(0, 4).map(m => `${m.sheet} 第${m.row}列(${m.person || '無姓名'}填 ${m.cellMonth})`).join('、') });
+  const bad = cur.rows.filter(r => r.tokenBad);
+  if (bad.length) w.push({ level: 'warn', text: `${bad.length} 筆 tokens 數字無法判讀,未計入合計:` + bad.slice(0, 4).map(r => `${disp(r.company)} ${r.dept}「${r.tokensRaw}」`).join('、') });
+  const noDept = cur.rows.filter(r => r.dept === '(未填部門)');
+  if (noDept.length) w.push({ level: 'warn', text: `${noDept.length} 筆沒有填部門。` });
+  // 同一人同一工具重複
+  const dup = {}; cur.rows.forEach(r => r.tools.forEach(t => { const k = personKey(r) + '|' + t; dup[k] = (dup[k] || 0) + 1; }));
+  const dupN = Object.values(dup).filter(n => n > 1).length;
+  if (dupN) w.push({ level: 'warn', text: `${dupN} 組「同一人、同一工具」在同月出現多列,請確認是否重複填報。` });
+  if (prev) {
+    const pm = summarizeMonth(records, prev);
+    for (const c of pm.companies) {
+      if (!cur.byCompany[c]) { w.push({ level: 'warn', text: `${disp(c)} 在 ${monthShort(prev)} 有資料,${monthShort(month)} 還沒有匯入,比較時會缺少這家公司。` }); continue; }
+      const a = pm.byCompany[c], b = cur.byCompany[c];
+      const ra = a.purposePeople / a.people, rb = b.purposePeople / b.people;
+      if (ra - rb >= 0.3) w.push({ level: 'warn', text: `${disp(c)}「導入工作應用」填寫率從 ${Math.round(ra * 100)}% 降到 ${Math.round(rb * 100)}%(${a.purposePeople}/${a.people} 人 → ${b.purposePeople}/${b.people} 人),可能是漏填,不一定是使用變少。` });
+    }
+    // 上個月有填 tokens 的部門,這個月完全沒人填 → 合計會偏低,不是真的用量下降
+    const curDepts = new Set(tokenDepts(cur.rows).map(d => d.company + '|' + d.dept));
+    tokenDepts(pm.rows).forEach(d => { if (!curDepts.has(d.company + '|' + d.dept) && d.tokens > 0) w.push({ level: 'warn', kind: 'tokengone', company: d.company, text: `${disp(d.company)} ${d.dept}:${monthShort(prev)} 有 ${d.people} 人填 tokens(合計 ${fmtTokens(d.tokens)}),${monthShort(month)} 沒有人填,比較 tokens 合計時 ${monthShort(month)} 會偏低,不代表使用減少。` }); });
+    // 個人 tokens 大幅變動
+    const pk = {}; pm.rows.forEach(r => { if (r.tokens) pk[personKey(r) + '|' + r.tools.join('/')] = r.tokens; });
+    cur.rows.forEach(r => {
+      const p = pk[personKey(r) + '|' + r.tools.join('/')];
+      if (p && r.tokens && (r.tokens / p >= 50 || r.tokens / p <= 1 / 50)) w.push({ level: 'warn', kind: 'tokenjump', company: r.company, text: `${disp(r.company)} ${r.dept} 某位同仁(${r.toolRaw}):tokens 從 ${fmtTokens(p)} 變成 ${fmtTokens(r.tokens)},差 ${Math.round(Math.max(r.tokens / p, p / r.tokens))} 倍,請確認單位是否填錯。` });
+    });
+  }
+  return w;
+}
+
+// ---------- 從「AI用量統計」系統資料庫(manual_ai_usage_monthly)的一列,轉成簡報用的標準紀錄 ----------
+// token_amount 為 0 或空白代表「沒有 tokens 數字」(使用網頁版或免費工具),但這個人仍算有使用 AI。
+function recordFromDbRow(r, i) {
+  const purposeRaw = clean(r.usage_note);
+  const purpose = toTrad(purposeRaw);
+  const amt = Number(r.token_amount);
+  const tokens = amt > 0 ? amt : null;
+  const rawTok = clean(r.token_amount_raw);
+  return {
+    month: String(r.report_month || '').slice(0, 7), company: normCompany(clean(r.company), ''), dept: toTrad(clean(r.department)) || '(未填部門)',
+    person: clean(r.person_name) || ('#' + i), tools: splitTools(r.ai_tool_name), toolRaw: toTrad(clean(r.ai_tool_name)), plan: normPlan(r.plan_type), api: toTrad(clean(r.api_names)),
+    tokens, tokensRaw: rawTok, tokenBad: tokens == null && !!rawTok && !/^0+(\.0+)?$/.test(rawTok),
+    purpose, cats: classifyPurpose(purposeRaw), isAuto: AUTOMATION_RE.test(purpose), note: '', src: 'db#' + i
+  };
+}
+
+function fmtTokens(n) {
+  if (n == null) return '—';
+  if (n >= 1e9) return (n / 1e9).toFixed(n >= 1e10 ? 1 : 2) + 'B';
+  if (n >= 1e6) return (n / 1e6).toFixed(n >= 1e8 ? 0 : 1) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(n >= 1e5 ? 0 : 1) + 'K';
+  return String(Math.round(n));
+}
+
+const CORE = { recordFromDbRow, disp, COMPANY_DISPLAY, tokenDepts, tokenByCategory, parseWorkbook, summarizeMonth, listMonths, prevMonthOf, deptDetail, automationCases, buildWarnings, fmtTokens, monthLabel, monthShort, toTrad, PURPOSE_CATEGORIES };
+if (typeof module !== 'undefined') module.exports = CORE;
+
+</script>
+<script>
+(function () {
+  'use strict';
+  const { parseWorkbook, summarizeMonth, listMonths, prevMonthOf, deptDetail, automationCases, buildWarnings, fmtTokens, monthLabel, monthShort, PURPOSE_CATEGORIES, disp, tokenDepts, tokenByCategory } = CORE;
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const DASHBOARD = true; // true = 嵌在「AI用量統計」系統裡,資料由系統資料庫提供,不顯示匯入按鈕
+  const STORE_KEY = 'aiUsageMonthly.v2';
+  // 內建資料:建置時由 Excel 讀入(姓名已改成代號)。匯入新 Excel 時,同公司同月份會取代內建的,其他保留。
+  const EMBEDDED = /*DATA*/null || { records: [], info: null, source: "" };
+  const state = { records: [], info: null, month: null, compare: false, cur: 0 };
+  const pctOf = (a, b) => b ? Math.round(a / b * 100) : 0;
+  const pctTxt = (a, b) => (a > 0 && b && a / b < 0.005) ? '<1%' : pctOf(a, b) + '%';
+  const keyOf = r => r.company + '|' + r.month;
+
+  // ---------- 暫存(只存在這台電腦的這個瀏覽器) ----------
+  function save(imported) { try { localStorage.setItem(STORE_KEY, JSON.stringify({ records: imported, info: state.info })); } catch (e) {} }
+  let importedOnly = [];
+  function init() {
+    let stored = null;
+    try { stored = JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); } catch (e) {}
+    if (stored && Array.isArray(stored.records) && stored.records.length) {
+      importedOnly = stored.records; const over = new Set(importedOnly.map(keyOf));
+      state.records = EMBEDDED.records.filter(r => !over.has(keyOf(r))).concat(importedOnly); state.info = stored.info || EMBEDDED.info;
+    } else { state.records = EMBEDDED.records.slice(); state.info = EMBEDDED.info; }
+  }
+  function setStatus(msg, err) { const el = $('status'); el.textContent = msg || ''; el.classList.toggle('err', !!err); }
+
+  // ---------- 匯入新的 Excel ----------
+  async function importFiles(files) {
+    if (!files.length) return;
+    if (typeof XLSX === 'undefined') { setStatus('讀取 Excel 的元件沒有載入,請確認網路後重新整理頁面。', true); return; }
+    const merged = { subtotalRows: 0, monthMismatch: [], skippedSheets: [], sheets: [] }; const incoming = [];
+    try {
+      for (const f of files) {
+        const wb = XLSX.read(await f.arrayBuffer(), { type: 'array' });
+        const { records, info } = parseWorkbook(XLSX, wb);
+        records.forEach(r => { r.person = r.company + r.dept + r.person; incoming.push(r); });
+        merged.subtotalRows += info.subtotalRows; merged.monthMismatch.push(...info.monthMismatch.map(m => ({ ...m, person: '' }))); merged.skippedSheets.push(...info.skippedSheets);
+      }
+    } catch (e) { setStatus('讀取失敗:' + (e && e.message ? e.message : e) + '。請確認是填報用的 Excel 檔。', true); return; }
+    if (!incoming.length) { setStatus('這個檔案裡找不到填報資料(需要有「統計月份」「公司」欄位的工作表)。', true); return; }
+    // 為了不在畫面或暫存裡留下姓名,匯入時把姓名換成代號(只用來判斷「是不是同一個人」)
+    const ids = new Map(); incoming.forEach(r => { if (!ids.has(r.person)) ids.set(r.person, 'U' + (ids.size + 1)); r.person = ids.get(r.person); r.note = ''; });
+    const touched = new Set(incoming.map(keyOf));
+    importedOnly = importedOnly.filter(r => !touched.has(keyOf(r))).concat(incoming);
+    state.records = EMBEDDED.records.filter(r => !touched.has(keyOf(r))).concat(importedOnly);
+    state.info = merged; save(importedOnly);
+    setStatus(`已匯入 ${incoming.length} 筆(${[...new Set(incoming.map(r => disp(r.company)))].join('、')};${listMonths(incoming).map(monthShort).join('、')})。同公司同月份已用新資料取代。`);
+    const ms = listMonths(state.records); state.month = ms[ms.length - 1]; state.compare = !!prevMonthOf(state.records, state.month);
+    render();
+  }
+
+  // ---------- 小工具 ----------
+  function delta(cur, prev, unit) {
+    if (prev == null) return '';
+    const d = cur - prev; if (d === 0) return `<span class="d">與${esc(state._prevShort)}持平</span>`;
+    return `<span class="d ${d > 0 ? 'up' : 'down'}">${d > 0 ? '▲ +' : '▼ '}${d}${unit || ''} 較${esc(state._prevShort)}</span>`;
+  }
+  const tipAttr = t => ` data-tip="${esc(t)}"`;
+  function hbars(items, opt) {
+    opt = opt || {};
+    const max = Math.max(1e-9, ...items.flatMap(i => [i.cur, i.prev || 0]));
+    const fmt = opt.fmt || (v => v + (opt.unit || ''));
+    return `<div class="hbars">` + items.map(i => {
+      const w = v => Math.max(0, v / max * 100).toFixed(1);
+      const hasPrev = state.compare && i.prev != null;
+      const tip = `${i.label}:${state._curShort} ${fmt(i.cur)}` + (hasPrev ? `;${state._prevShort} ${fmt(i.prev)}` : '');
+      return `<div class="hrow hit"${tipAttr(tip)}><div class="lab">${esc(i.label)}${i.sub ? `<div class="sub">${i.sub}</div>` : ''}</div><div class="track"><div class="bar-seg" style="width:${w(i.cur)}%"></div>${hasPrev ? `<div class="bar-seg prev" style="width:${w(i.prev)}%"></div>` : ''}</div><div class="val">${fmt(i.cur)}${i.valSub ? `<small>${i.valSub}</small>` : ''}${hasPrev ? `<small>${esc(state._prevShort)} ${fmt(i.prev)}</small>` : ''}</div></div>`;
+    }).join('') + `</div>`;
+  }
+  const slide = (kicker, title, lede, body, extra) => `<section class="slide ${extra || ''}"><div class="kicker">${esc(kicker)}</div><h2>${title}</h2>${lede ? `<p class="lede">${lede}</p>` : ''}${body}</section>`;
+  const legendCmp = () => state.compare ? `<div class="legend"><span><i style="background:var(--accent)"></i>${esc(state._curShort)}</span><span><i style="background:var(--prev)"></i>${esc(state._prevShort)}(上月)</span></div>` : '';
+  const catShort = n => n.replace('與', '/');
+
+  // ---------- 簡報各頁 ----------
+  function build() {
+    const m = state.month, pm = prevMonthOf(state.records, m);
+    const cur = summarizeMonth(state.records, m);
+    const prev = (state.compare && pm) ? summarizeMonth(state.records, pm) : null;
+    state._curShort = monthShort(m); state._prevShort = pm ? monthShort(pm) : '';
+    const A = cur.all, P = prev ? prev.all : null;
+    const noTok = A.people - A.tokenPeople;
+    const slides = [];
+
+    // 公司依 tokens 排序
+    const byTok = cur.companies.slice().sort((a, b) => cur.byCompany[b].tokens - cur.byCompany[a].tokens);
+    const topCo = byTok[0]; const topShare = pctOf(cur.byCompany[topCo].tokens, A.tokens);
+    const deptsCur = tokenDepts(cur.rows); const deptsPrev = prev ? tokenDepts(prev.rows) : [];
+    const catTok = tokenByCategory(cur.rows); const catTotal = catTok.reduce((a, c) => a + c.tokens, 0);
+    const topCoCat = tokenByCategory(cur.rows.filter(r => r.company === topCo))[0];
+
+    // ---- 封面 ----
+    slides.push(`<section class="slide cover"><div class="kicker">經營會議</div><h1>集團 AI 使用現況</h1><p class="sub">${esc(monthLabel(m))}・${A.companies} 家公司、${A.depts} 個部門回報${prev ? `(與${esc(state._prevShort)}比較)` : ''}</p>
+      <div class="kpis">
+        <div class="kpi"><div class="v">${fmtTokens(A.tokens)}</div><div class="l">tokens 合計</div><div class="d">${P && P.tokens ? (A.tokens >= P.tokens ? `<span class="d up">▲ ${Math.round((A.tokens / P.tokens - 1) * 100)}% 較${esc(state._prevShort)}</span>` : `<span class="d down">▼ ${Math.round((1 - A.tokens / P.tokens) * 100)}% 較${esc(state._prevShort)}</span>`) : ''}</div></div>
+        <div class="kpi"><div class="v">${A.tokenPeople}</div><div class="l">有 tokens 數字的人</div><div class="d"></div></div>
+        <div class="kpi"><div class="v">${A.people}</div><div class="l">填報使用 AI 的人</div><div class="d">${P ? delta(A.people, P.people, ' 人') : ''}</div></div>
+        <div class="kpi"><div class="v">${A.purposePeople}</div><div class="l">有填「導入工作應用」</div><div class="d"></div></div>
+      </div>
+      <p class="takeaway">${esc(monthShort(m))} tokens 合計 ${fmtTokens(A.tokens)},其中${esc(disp(topCo))}占 ${topShare}%${topCoCat ? `,主要用在${esc(topCoCat.cat)}` : ''}。另有 ${A.people} 人填報使用 AI,其中 ${pctOf(noTok, A.people)}% 使用網頁版或免費工具,tokens 無法統計,因此另以「導入工作應用」說明用在哪些工作。</p></section>`);
+
+    // ---- 第一部分:tokens ----
+    const topDepts = deptsCur.slice(0, 3);
+    const restDepts = deptsCur.slice(3);
+    const sumTok = l => l.reduce((x, d) => x + d.tokens, 0);
+    slides.push(slide('第一部分・tokens 用量', topDepts[0] ? `${esc(disp(topDepts[0].company))}${esc(topDepts[0].dept)}占 ${pctTxt(topDepts[0].tokens, A.tokens)},是 tokens 最大的來源` : '本月沒有 tokens 資料', 'tokens 合計最多的部門,其餘部門合併計算。',
+      hbars(topDepts.concat(restDepts.length ? [{ other: true }] : []).map(d => {
+        if (d.other) { const pvOther = prev ? Math.max(0, sumTok(deptsPrev) - sumTok(topDepts.map(t => deptsPrev.find(x => x.company === t.company && x.dept === t.dept) || { tokens: 0 }))) : null; return { label: `其他 ${restDepts.length} 個部門`, sub: `${restDepts.reduce((x, y) => x + y.people, 0)} 人有填`, cur: sumTok(restDepts), prev: null, valSub: `占 ${pctTxt(sumTok(restDepts), A.tokens)}` }; }
+        const pv = prev ? ((deptsPrev.find(x => x.company === d.company && x.dept === d.dept) || {}).tokens ?? 0) : null;
+        return { label: `${disp(d.company)}・${d.dept}`, sub: `${d.people} 人有填`, cur: d.tokens, prev: null, valSub: `占 ${pctTxt(d.tokens, A.tokens)}` };
+      }), { fmt: v => v ? fmtTokens(v) : '—' })));
+
+    const maxCat = Math.max(1, ...catTok.map(c => c.tokens));
+    slides.push(slide('第一部分・tokens 用量', catTok[0] ? `${esc(catTok[0].cat)}占 tokens 的 ${pctOf(catTok[0].tokens, catTotal)}%` : '本月沒有 tokens 資料', '用部門填寫的「導入工作應用」歸類,這些 tokens 主要用在哪裡。',
+      `<div class="hbars">` + catTok.map(c => `<div class="hrow hit"${tipAttr(`${c.cat}:${fmtTokens(c.tokens)}(占 ${pctTxt(c.tokens, catTotal)})`)}><div class="lab">${esc(c.cat)}</div><div class="track"><div class="bar-seg" style="width:${(c.tokens / maxCat * 100).toFixed(1)}%"></div></div><div class="val">${fmtTokens(c.tokens)}<small>占 ${pctTxt(c.tokens, catTotal)}</small></div></div>`).join('') + `</div>` +
+      `<h3 class="h3">主要部門實際填寫的用途</h3><div class="tablebox"><table><thead><tr><th>公司・部門</th><th class="n">tokens</th><th>用在哪裡(填報內容)</th><th>工具</th></tr></thead><tbody>` +
+      topDepts.map(d => `<tr><td>${esc(disp(d.company))}<br>${esc(d.dept)}</td><td class="n">${fmtTokens(d.tokens)}</td><td>${esc(d.purposes.join('、')) || '—'}</td><td>${esc(d.tools.join('、'))}</td></tr>`).join('') + `</tbody></table></div>` +
+      `<p class="note">一筆填寫若同時屬於好幾類,tokens 平均分配到各類。</p>`));
+
+    // ---- 第二部分:人數、工作、工具 ----
+    const byPeople = cur.companies.slice().sort((a, b) => cur.byCompany[b].people - cur.byCompany[a].people);
+    const rows4 = [];
+    byPeople.forEach(c => { const b = cur.byCompany[c]; rows4.push({ label: disp(c) + (prev ? `(${state._curShort})` : ''), a: b.tokenPeople, b: b.noTokenPeople, n: b.people }); if (prev && prev.byCompany[c]) { const q = prev.byCompany[c]; rows4.push({ label: `${disp(c)}(${state._prevShort})`, a: q.tokenPeople, b: q.noTokenPeople, n: q.people, old: true }); } });
+    const maxN = Math.max(1, ...rows4.map(r => r.n));
+    slides.push(slide('第二部分・使用人數與應用', `${A.people} 人填報使用 AI${P && A.people > P.people ? `,較${esc(state._prevShort)}增加 ${A.people - P.people} 人` : ''}`, `各公司有填報使用 AI 的人數。其中 ${noTok} 人(${pctOf(noTok, A.people)}%)使用網頁版或免費工具,tokens 無法統計,因此另以工作應用呈現。`,
+      `<div class="legend"><span><i style="background:var(--accent)"></i>有 tokens 數字</span><span><i style="background:var(--warm)"></i>使用網頁版或免費工具(無 tokens 數字)</span></div><div class="hbars">` +
+      rows4.map(r => `<div class="hrow hit"${tipAttr(`${r.label}:有 tokens 數字 ${r.a} 人、網頁版或免費工具 ${r.b} 人`)}><div class="lab">${esc(r.label)}</div><div class="track"><div class="stack" style="width:${(r.n / maxN * 100).toFixed(1)}%;${r.old ? 'opacity:.55' : ''}"><span class="s-a" style="flex:${r.a}"></span><span class="s-b" style="flex:${r.b}"></span></div></div><div class="val">${r.n} 人<small>${r.a} 人有 tokens 數字</small></div></div>`).join('') + `</div>` +
+      `<p class="note">這是各公司「有填報的人數」,不是員工總數。</p>`));
+
+    const toolNames = Object.keys(A.tools).sort((a, b) => A.tools[b] - A.tools[a]).slice(0, 10);
+    const maxC = Math.max(1, ...byPeople.map(c => cur.byCompany[c].people));
+    slides.push(slide('第二部分・使用人數與應用', toolNames[0] ? `${esc(toolNames[0])} 最多人用,共 ${A.tools[toolNames[0]]} 人` : '本月沒有工具資料', `各 AI 工具的使用人數(一個人用多個工具會各算一次),以及付費與免費的比例。`,
+      legendCmp() + hbars(toolNames.map(t => ({ label: t, cur: A.tools[t], prev: P ? (P.tools[t] || 0) : null })), { unit: ' 人' }) +
+      `<h3 class="h3">付費與免費使用者</h3><div class="legend"><span><i style="background:var(--accent)"></i>付費方案(月費、年費、額度制)</span><span><i style="background:var(--accent-soft);border:1px solid var(--accent)"></i>免費方案</span></div><div class="hbars">` +
+      byPeople.map(c => { const b = cur.byCompany[c]; const q = prev && prev.byCompany[c]; return `<div class="hrow hit"${tipAttr(`${disp(c)}:付費 ${b.paidPeople} 人、免費 ${b.freePeople} 人`)}><div class="lab">${esc(disp(c))}</div><div class="track"><div class="stack" style="width:${(b.people / maxC * 100).toFixed(1)}%"><span class="s-a" style="flex:${b.paidPeople}"></span><span class="s-c" style="flex:${b.freePeople}"></span></div></div><div class="val">${b.paidPeople} / ${b.freePeople}${q ? `<small>${esc(state._prevShort)} ${q.paidPeople} / ${q.freePeople}</small>` : ''}</div></div>`; }).join('') + `</div><p class="note">右側數字是「付費人數 / 免費人數」。</p>`));
+
+    return slides;
+  }
+
+  // ---------- 畫面 ----------
+  function render() {
+    const sel = $('month'), cmp = $('cmp');
+    const months = listMonths(state.records);
+    if (!months.length) { $('deck').innerHTML = DASHBOARD ? `<section class="slide"><h2>還沒有資料</h2><p class="lede">請先到「集團各公司統計」匯入月報表 Excel,這裡就會自動產生簡報。</p></section>` : `<section class="slide"><h2>還沒有資料</h2><p class="lede">按上方「匯入 Excel」選擇填報檔案。</p></section>`; return; }
+    if (!state.month || !months.includes(state.month)) state.month = months[months.length - 1];
+    sel.innerHTML = months.map(x => `<option value="${x}" ${x === state.month ? 'selected' : ''}>${monthLabel(x)}</option>`).join(''); sel.disabled = false;
+    const pm = prevMonthOf(state.records, state.month);
+    cmp.disabled = !pm; $('cmpWrap').classList.toggle('off', !pm);
+    if (!pm) state.compare = false;
+    cmp.checked = state.compare;
+    $('cmpText').textContent = pm ? `與上個月(${monthShort(pm)})比較` : '與上個月比較(沒有上個月資料)';
+    $('presentBtn').disabled = false; $('clearBtn').disabled = !importedOnly.length;
+    $('deck').innerHTML = build().join('');
+    updateCurrent();
+  }
+
+  // ---------- 簡報模式 ----------
+  const slideEls = () => [...document.querySelectorAll('#deck .slide')].filter(s => !s.classList.contains('nopresent'));
+  function updateCurrent() {
+    const els = slideEls(); document.querySelectorAll('#deck .slide').forEach(s => s.classList.remove('current'));
+    if (!els.length) return; state.cur = Math.min(Math.max(state.cur, 0), els.length - 1); els[state.cur].classList.add('current');
+    $('pCount').textContent = `${state.cur + 1} / ${els.length}`;
+  }
+  function enterPresent() { document.body.classList.add('present'); state.cur = 0; updateCurrent(); try { document.documentElement.requestFullscreen && document.documentElement.requestFullscreen().catch(() => {}); } catch (e) {} }
+  function exitPresent() { document.body.classList.remove('present'); try { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); } catch (e) {} }
+  function go(d) { state.cur += d; updateCurrent(); const c = document.querySelector('#deck .slide.current'); if (c) c.scrollTop = 0; }
+  document.addEventListener('keydown', e => {
+    if (!document.body.classList.contains('present')) return;
+    if (['ArrowRight', 'PageDown', ' ', 'Enter'].includes(e.key)) { e.preventDefault(); go(1); }
+    else if (['ArrowLeft', 'PageUp', 'Backspace'].includes(e.key)) { e.preventDefault(); go(-1); }
+    else if (e.key === 'Escape') exitPresent();
+  });
+  document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && document.body.classList.contains('present')) exitPresent(); });
+
+  // ---------- 事件 ----------
+  $('file').addEventListener('change', e => { const fs = [...e.target.files]; e.target.value = ''; importFiles(fs); });
+  $('fileBtn').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('file').click(); } });
+  $('month').addEventListener('change', e => { state.month = e.target.value; render(); });
+  $('cmp').addEventListener('change', e => { state.compare = e.target.checked; render(); });
+  $('presentBtn').addEventListener('click', enterPresent);
+  $('pExit').addEventListener('click', exitPresent);
+  $('pPrev').addEventListener('click', () => go(-1));
+  $('pNext').addEventListener('click', () => go(1));
+  let clearArm = 0;
+  $('clearBtn').addEventListener('click', () => {
+    if (!clearArm) { clearArm = 1; $('clearBtn').textContent = '再按一次確認'; setTimeout(() => { clearArm = 0; $('clearBtn').textContent = '還原內建資料'; }, 4000); return; }
+    clearArm = 0; $('clearBtn').textContent = '還原內建資料'; importedOnly = [];
+    try { localStorage.removeItem(STORE_KEY); } catch (e) {}
+    state.records = EMBEDDED.records.slice(); state.info = EMBEDDED.info; state.month = null; setStatus('已移除你匯入的資料,還原成內建資料。'); init2(); render();
+  });
+  ['dragover', 'drop'].forEach(ev => window.addEventListener(ev, e => { if (e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files')) { e.preventDefault(); if (ev === 'drop') importFiles([...e.dataTransfer.files].filter(f => /\.xlsx?$/i.test(f.name))); } }));
+  const tip = $('tip');
+  document.addEventListener('mouseover', e => { const t = e.target.closest && e.target.closest('[data-tip]'); if (!t) { tip.style.display = 'none'; return; } tip.textContent = t.getAttribute('data-tip'); tip.style.display = 'block'; });
+  document.addEventListener('mousemove', e => { if (tip.style.display === 'block') { const x = Math.min(e.clientX + 14, window.innerWidth - tip.offsetWidth - 8); tip.style.left = Math.max(8, x) + 'px'; tip.style.top = (e.clientY + 16) + 'px'; } });
+  window.__aiReport = { importBuffer: async (buf, name) => importFiles([{ name: name || 'test.xlsx', arrayBuffer: async () => buf }]), state };
+
+  function init2() { const ms = listMonths(state.records); state.month = ms[ms.length - 1]; state.compare = !!prevMonthOf(state.records, state.month); }
+  if (DASHBOARD) { document.body.classList.add('dash'); }
+  else { init(); init2(); }
+  window.AiReport = {
+    setDbRows(rows) {
+      const keepMonth = state.month;
+      state.records = (rows || []).map((x, i) => CORE.recordFromDbRow(x, i)).filter(x => /^\d{4}-\d{2}$/.test(x.month));
+      const ms = listMonths(state.records);
+      state.month = ms.includes(keepMonth) ? keepMonth : ms[ms.length - 1];
+      state.compare = state.compare || !!prevMonthOf(state.records, state.month);
+      render();
+    }
+  };
+  if (!DASHBOARD && EMBEDDED.records.length && !importedOnly.length) setStatus(`已載入內建資料:${listMonths(EMBEDDED.records).map(monthLabel).join('、')}。每月匯入新的 Excel 就會加進來。`);
+  render();
+})();
+
+</script>
+
+</body></html>

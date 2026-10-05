@@ -364,9 +364,14 @@
   <div class="main-tabs" id="main-tabs">
     <button data-tab="manual-import" class="active">集團各公司統計</button>
     <button data-tab="ai-systems">大量雲端系統統計</button>
+    <button data-tab="deck">經營會議簡報</button>
   </div>
 
   <div class="container">
+
+    <div class="tab-panel" id="tab-deck">
+      <iframe id="deck-frame" src="deck.html" title="經營會議簡報" allow="fullscreen" allowfullscreen style="width:100%; height:calc(100vh - 190px); min-height:620px; border:1px solid var(--line, #dde3e9); border-radius:12px; background:#fff;"></iframe>
+    </div>
 
     <div class="tab-panel" id="tab-ai-systems">
       <div class="range-tabs" id="range-tabs">
@@ -889,6 +894,7 @@ document.getElementById('main-tabs').addEventListener('click', (e) => {
     document.getElementById('manual-month-picker').value = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
     loadManualMonth();
   }
+  if (btn.dataset.tab === 'deck') { loadDeckData(); }
   if (btn.dataset.tab === 'ai-systems' && !aiSystemsTabLoaded) {
     aiSystemsTabLoaded = true;
     loadData();
@@ -898,6 +904,37 @@ document.getElementById('main-tabs').addEventListener('click', (e) => {
 // ══════════════════════════════════════════════════════════
 // 各部門月報表：Excel 匯入
 // ══════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════
+// 經營會議簡報:從 manual_ai_usage_monthly 讀出全部月份的逐人明細,交給 deck.html 產生簡報
+// (deck.html 由 AI用量統計 專案資料夾的 src\ 原始碼建置而成,詳見該專案的 NOTES.md)
+// ══════════════════════════════════════════════════════════
+let deckRowsCache = null;
+let deckStale = true;
+
+async function loadDeckData() {
+  const frame = document.getElementById('deck-frame');
+  if (!deckStale && deckRowsCache) { pushDeckRows(frame, deckRowsCache); return; }
+  const all = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await sb.from('manual_ai_usage_monthly')
+      .select('report_month, company, department, person_name, ai_tool_name, plan_type, api_names, token_amount, token_amount_raw, usage_note')
+      .order('report_month', { ascending: true })
+      .range(from, from + 999);
+    if (error) { console.error('讀取簡報資料失敗:', error); return; }
+    all.push(...(data || []));
+    if (!data || data.length < 1000) break;
+  }
+  deckRowsCache = all;
+  deckStale = false;
+  pushDeckRows(frame, all);
+}
+
+function pushDeckRows(frame, rows) {
+  const send = () => { try { if (frame.contentWindow && frame.contentWindow.AiReport) frame.contentWindow.AiReport.setDbRows(rows); } catch (e) { console.error(e); } };
+  const ready = frame.contentDocument && frame.contentDocument.readyState === 'complete' && frame.contentWindow && frame.contentWindow.AiReport;
+  if (ready) send(); else frame.addEventListener('load', send, { once: true });
+}
+
 let parsedManualRows = [];   // 逐人明細
 let parsedDeptTotals = [];   // Excel自己填的部門小計（只用來跟系統自動加總的結果比對，抓有沒有落差）
 
@@ -1000,6 +1037,8 @@ function parseWorkbook(workbook) {
     }
     const { headerRow, cols } = found;
     let currentDept = null, currentCompany = null, currentMonth = null;
+    const sheetMonthMatch = String(sheetName).match(/(\d{1,2})\s*月/);
+    const sheetMonthNum = sheetMonthMatch ? Number(sheetMonthMatch[1]) : null; // 工作表名稱裡的月份(例如「南京9月」→ 9),以它為準
 
     for (let r = headerRow + 1; r < sheetRows.length; r++) {
       const row = sheetRows[r] || [];
@@ -1030,17 +1069,17 @@ function parseWorkbook(workbook) {
       if (dept) currentDept = dept;
       if (company) currentCompany = company;
       const monthVal = cols.month !== undefined ? row[cols.month] : null;
-      const parsedMonth = parseReportMonth(monthVal);
+      let parsedMonth = parseReportMonth(monthVal);
+      // 工作表名稱寫幾月,就當作幾月(避免有人在「8月」的表裡把統計月份填成 9 月)
+      if (parsedMonth && sheetMonthNum && Number(parsedMonth.slice(5, 7)) !== sheetMonthNum) parsedMonth = parsedMonth.slice(0, 4) + '-' + String(sheetMonthNum).padStart(2, '0') + '-01';
       if (parsedMonth) currentMonth = parsedMonth;
 
       if (!currentCompany || !currentDept) continue;
 
-      // token欄位沒填、或填了但換算出來是0，一律當作「這個人這個月沒有回報」，整列不列入（不然畫面會一堆0很亂）
+      // token欄位沒填、或換算出來是0:這個人仍然有使用AI(多半是網頁版或免費工具,沒有token數字),
+      // 一樣列入並存成0,這樣「使用人數」「導入工作應用」「使用工具」才統計得到他。部門token小計不受影響(加0)。
       const tokenAmount = cols.token !== undefined ? parseTokenAmount(row[cols.token]) : null;
-      if (!tokenAmount) {
-        skippedNoReportCount++;
-        continue;
-      }
+      if (!tokenAmount) skippedNoReportCount++;
 
       rows.push({
         report_month: currentMonth,
@@ -1050,7 +1089,7 @@ function parseWorkbook(workbook) {
         ai_tool_name: cols.tool !== undefined && row[cols.tool] ? String(row[cols.tool]).trim() : null,
         plan_type: cols.plan !== undefined && row[cols.plan] ? String(row[cols.plan]).trim() : null,
         api_names: cols.api !== undefined && row[cols.api] ? String(row[cols.api]).trim() : null,
-        token_amount: tokenAmount,
+        token_amount: tokenAmount || 0,
         token_amount_raw: cols.token !== undefined && row[cols.token] != null ? String(row[cols.token]) : null,
         usage_note: cols.usage !== undefined && row[cols.usage] ? String(row[cols.usage]).trim() : null,
         remark: cols.remark !== undefined && row[cols.remark] ? String(row[cols.remark]).trim() : null,
@@ -1059,7 +1098,7 @@ function parseWorkbook(workbook) {
   });
 
   if (skippedNoReportCount > 0) {
-    warnings.push(`有 ${skippedNoReportCount} 筆沒有填token用量，視為當月沒有回報，已自動略過不列入`);
+    warnings.push(`有 ${skippedNoReportCount} 筆沒有token數字（使用網頁版或免費工具），仍會列入使用人數與工作應用統計，token以0計`);
   }
 
   return { rows, deptTotals, warnings };
@@ -1155,6 +1194,7 @@ async function confirmImport() {
     alert('匯入失敗：' + error.message);
     return;
   }
+  deckStale = true;
   alert('匯入成功，共 ' + toInsert.length + ' 筆');
   document.getElementById('import-summary').style.display = 'none';
   document.getElementById('file-input').value = '';
