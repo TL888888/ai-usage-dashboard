@@ -104,6 +104,27 @@ select { background: var(--surface); border: 1px solid var(--line); border-radiu
 .hit:hover { background: color-mix(in srgb, var(--accent) 7%, transparent); }
 .hrow.hit { border-radius: 6px; padding-block: 3px; }
 
+/* ---- 2026-10-07:重點數字紅字、各公司前三名卡片、上月位置直線 ---- */
+.hl { color: var(--bad); }
+.blue { color: var(--accent); }
+.cos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 640px) { .cos { grid-template-columns: 1fr; } }
+.co { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.co-h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 16px; }
+.co-h span { font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.co-h span b { font-size: 16px; }
+.co-r { display: flex; justify-content: space-between; gap: 8px; }
+.co-meta { font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+.co-meta span { color: var(--ink); }
+.co-none small { color: var(--muted); }
+.co-foot { font-size: 12.5px; color: var(--muted); margin-top: auto; padding-top: 4px; }
+.ptrack { position: relative; padding-block: 6px; }
+.ptrack .stack { height: 22px; }
+.ptrack .stack > span { color: #fff; font-size: 12px; font-weight: 700; text-align: center; line-height: 22px; overflow: hidden; }
+.mk { position: absolute; top: 0; bottom: 0; width: 3px; margin-left: -1.5px; background: var(--ink2); border-radius: 2px; }
+.mk-i { width: 3px !important; height: 16px !important; border-radius: 2px !important; background: var(--ink2); vertical-align: -3px !important; }
+.hrow .val b { font-weight: 700; }
+
 /* ---- 表格 ---- */
 .tablebox { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
 table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
@@ -191,6 +212,9 @@ const COMPANY_ALIASES = [
 // ---------- 設定區 1b:簡報上顯示的公司全名(左邊是上面標準化後的名稱) ----------
 const COMPANY_DISPLAY = { '台灣': '台灣大量', '南京': '南京大量', '漣水': '漣水大量', '碩量': '碩量(昆山東莞)' };
 const disp = c => COMPANY_DISPLAY[c] || c;
+// 簡報上公司的排列順序(Michelle 指定:南京、台灣、漣水、碩量);不在清單裡的公司排在最後
+const COMPANY_ORDER = ['南京', '台灣', '漣水', '碩量'];
+const sortCompanies = list => list.slice().sort((a, b) => { const ia = COMPANY_ORDER.indexOf(a), ib = COMPANY_ORDER.indexOf(b); return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b, 'zh-Hant'); });
 
 // ---------- 設定區 2:AI工具名稱對照(小寫、去空白後比對)----------
 const TOOL_ALIASES = {
@@ -432,6 +456,20 @@ function tokenDepts(rows) {
       purposes: topPhrases(rs, 4), tools: [...tools].sort((a, b) => b[1] - a[1]).slice(0, 3).map(e => e[0]) };
   }).sort((a, b) => b.tokens - a.tokens);
 }
+// 各公司 tokens 前 N 名「部門」(不列個人姓名)。tokens 少於 N 個部門的公司就只列有的;
+// 完全沒有 tokens 的公司(例如全部用免費網頁版),改列最常用的工具與工作應用,讓簡報上仍有內容可說明。
+function companyTopDepts(rows, n) {
+  n = n || 3;
+  return sortCompanies([...new Set(rows.map(r => r.company))]).map(c => {
+    const rs = rows.filter(r => r.company === c);
+    const s = summarizeCompany(rs);
+    const depts = tokenDepts(rs);
+    const top = depts.slice(0, n);
+    const tools = Object.entries(s.tools).sort((a, b) => b[1] - a[1]).slice(0, 3).map(e => e[0]);
+    return { company: c, tokens: s.tokens, people: s.people, tokenPeople: s.tokenPeople, deptCount: depts.length, top,
+      restDepts: depts.length - top.length, tools, purposes: topPhrases(rs, 3) };
+  });
+}
 function tokenByCategory(rows) {
   const out = {};
   rows.filter(r => r.tokens != null && r.tokens > 0).forEach(r => {
@@ -512,14 +550,14 @@ function fmtTokens(n) {
   return String(Math.round(n));
 }
 
-const CORE = { recordFromDbRow, disp, COMPANY_DISPLAY, tokenDepts, tokenByCategory, parseWorkbook, summarizeMonth, listMonths, prevMonthOf, deptDetail, automationCases, buildWarnings, fmtTokens, monthLabel, monthShort, toTrad, PURPOSE_CATEGORIES };
+const CORE = { recordFromDbRow, disp, COMPANY_DISPLAY, COMPANY_ORDER, sortCompanies, companyTopDepts, tokenDepts, tokenByCategory, parseWorkbook, summarizeMonth, listMonths, prevMonthOf, deptDetail, automationCases, buildWarnings, fmtTokens, monthLabel, monthShort, toTrad, PURPOSE_CATEGORIES };
 if (typeof module !== 'undefined') module.exports = CORE;
 
 </script>
 <script>
 (function () {
   'use strict';
-  const { parseWorkbook, summarizeMonth, listMonths, prevMonthOf, deptDetail, automationCases, buildWarnings, fmtTokens, monthLabel, monthShort, PURPOSE_CATEGORIES, disp, tokenDepts, tokenByCategory } = CORE;
+  const { parseWorkbook, summarizeMonth, listMonths, prevMonthOf, deptDetail, automationCases, buildWarnings, fmtTokens, monthLabel, monthShort, PURPOSE_CATEGORIES, disp, tokenDepts, tokenByCategory, companyTopDepts } = CORE;
   const $ = id => document.getElementById(id);
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const DASHBOARD = true; // true = 嵌在「AI用量統計」系統裡,資料由系統資料庫提供,不顯示匯入按鈕
@@ -601,54 +639,50 @@ if (typeof module !== 'undefined') module.exports = CORE;
     const noTok = A.people - A.tokenPeople;
     const slides = [];
 
-    // 公司依 tokens 排序
-    const byTok = cur.companies.slice().sort((a, b) => cur.byCompany[b].tokens - cur.byCompany[a].tokens);
-    const topCo = byTok[0]; const topShare = pctOf(cur.byCompany[topCo].tokens, A.tokens);
-    const deptsCur = tokenDepts(cur.rows); const deptsPrev = prev ? tokenDepts(prev.rows) : [];
-    const catTok = tokenByCategory(cur.rows); const catTotal = catTok.reduce((a, c) => a + c.tokens, 0);
-    const topCoCat = tokenByCategory(cur.rows.filter(r => r.company === topCo))[0];
+    // 公司依 COMPANY_ORDER 排列(南京、台灣、漣水、碩量)
+    const tops = companyTopDepts(cur.rows, 3);
+    const deptsCur = tokenDepts(cur.rows);
+    const byTok = tops.slice().sort((a, b) => b.tokens - a.tokens);
+    const topCo = byTok[0];
+    const topCoCat = topCo && tokenByCategory(cur.rows.filter(r => r.company === topCo.company))[0];
+    const hl = s => `<span class="hl">${s}</span>`;
 
-    // ---- 封面 ----
-    slides.push(`<section class="slide cover"><div class="kicker">經營會議</div><h1>集團 AI 使用現況</h1><p class="sub">${esc(monthLabel(m))}・${A.companies} 家公司、${A.depts} 個部門回報${prev ? `(與${esc(state._prevShort)}比較)` : ''}</p>
-      <div class="kpis">
-        <div class="kpi"><div class="v">${fmtTokens(A.tokens)}</div><div class="l">tokens 合計</div><div class="d">${P && P.tokens ? (A.tokens >= P.tokens ? `<span class="d up">▲ ${Math.round((A.tokens / P.tokens - 1) * 100)}% 較${esc(state._prevShort)}</span>` : `<span class="d down">▼ ${Math.round((1 - A.tokens / P.tokens) * 100)}% 較${esc(state._prevShort)}</span>`) : ''}</div></div>
-        <div class="kpi"><div class="v">${A.tokenPeople}</div><div class="l">有 tokens 數字的人</div><div class="d"></div></div>
-        <div class="kpi"><div class="v">${A.people}</div><div class="l">填報使用 AI 的人</div><div class="d">${P ? delta(A.people, P.people, ' 人') : ''}</div></div>
-        <div class="kpi"><div class="v">${A.purposePeople}</div><div class="l">有填「導入工作應用」</div><div class="d"></div></div>
-      </div>
-      <p class="takeaway">${esc(monthShort(m))} tokens 合計 ${fmtTokens(A.tokens)},其中${esc(disp(topCo))}占 ${topShare}%${topCoCat ? `,主要用在${esc(topCoCat.cat)}` : ''}。另有 ${A.people} 人填報使用 AI,其中 ${pctOf(noTok, A.people)}% 使用網頁版或免費工具,tokens 無法統計,因此另以「導入工作應用」說明用在哪些工作。</p></section>`);
+    // ---- 第 1 頁:集團 tokens 合計 → 各公司 tokens 總數 ----
+    // (2026-10-07 Michelle:拿掉「有 tokens 數字的人」「有填導入工作應用」;各公司只列本月,不和上月比)
+    const up = P && P.tokens && A.tokens >= P.tokens;
+    const maxCo = Math.max(1, ...tops.map(t => t.tokens));
+    slides.push(slide('集團各公司 AI 使用統計', `${esc(state._curShort)}集團 tokens 合計 ${hl(fmtTokens(A.tokens))}${up ? `,較${esc(state._prevShort)} ${hl('▲' + Math.round((A.tokens / P.tokens - 1) * 100) + '%')}` : ''}`,
+      `${esc(monthLabel(m))}・${A.companies} 家公司、${A.depts} 個部門填報。以下依公司列出 tokens 總數。`,
+      `<div class="hbars">` + tops.map(t => `<div class="hrow hit"${tipAttr(`${disp(t.company)}:${t.tokens ? fmtTokens(t.tokens) : '使用網頁版或免費工具'}`)}><div class="lab"><b>${esc(disp(t.company))}</b><div class="sub">${t.tokenPeople ? `${t.deptCount} 個部門、${t.tokenPeople} 人有 tokens 數字` : '使用網頁版或免費工具'}</div></div><div class="track">${t.tokens ? `<div class="bar-seg" style="width:${(t.tokens / maxCo * 100).toFixed(1)}%"></div>` : ''}</div><div class="val">${t.tokens ? fmtTokens(t.tokens) : '—'}<small>${t.tokens ? `占 ${pctTxt(t.tokens, A.tokens)}` : '無 tokens 數字'}</small></div></div>`).join('') + `</div>` +
+      (topCo ? `<p class="takeaway" style="margin-top:22px">${esc(state._curShort)} tokens 合計 ${fmtTokens(A.tokens)},其中${esc(disp(topCo.company))}占 ${pctOf(topCo.tokens, A.tokens)}%${topCoCat ? `,主要用在${esc(topCoCat.cat)}` : ''}。各公司用量前三名的部門,請見下一頁。</p>` : ''), 'cover'));
 
-    // ---- 第一部分:tokens ----
-    const topDepts = deptsCur.slice(0, 3);
-    const restDepts = deptsCur.slice(3);
-    const sumTok = l => l.reduce((x, d) => x + d.tokens, 0);
-    slides.push(slide('第一部分・tokens 用量', topDepts[0] ? `${esc(disp(topDepts[0].company))}${esc(topDepts[0].dept)}占 ${pctTxt(topDepts[0].tokens, A.tokens)},是 tokens 最大的來源` : '本月沒有 tokens 資料', 'tokens 合計最多的部門,其餘部門合併計算。',
-      hbars(topDepts.concat(restDepts.length ? [{ other: true }] : []).map(d => {
-        if (d.other) { const pvOther = prev ? Math.max(0, sumTok(deptsPrev) - sumTok(topDepts.map(t => deptsPrev.find(x => x.company === t.company && x.dept === t.dept) || { tokens: 0 }))) : null; return { label: `其他 ${restDepts.length} 個部門`, sub: `${restDepts.reduce((x, y) => x + y.people, 0)} 人有填`, cur: sumTok(restDepts), prev: null, valSub: `占 ${pctTxt(sumTok(restDepts), A.tokens)}` }; }
-        const pv = prev ? ((deptsPrev.find(x => x.company === d.company && x.dept === d.dept) || {}).tokens ?? 0) : null;
-        return { label: `${disp(d.company)}・${d.dept}`, sub: `${d.people} 人有填`, cur: d.tokens, prev: null, valSub: `占 ${pctTxt(d.tokens, A.tokens)}` };
-      }), { fmt: v => v ? fmtTokens(v) : '—' })));
+    // ---- 第 2 頁:各公司 tokens 前三名部門 + 用在哪裡(只到公司、部門,不列姓名) ----
+    const best = deptsCur[0];
+    slides.push(slide('各公司 tokens 前三名部門', best ? `${esc(disp(best.company))}・${esc(best.dept)} 占集團 tokens 的 ${hl(pctTxt(best.tokens, A.tokens))}` : '本月沒有 tokens 資料', '',
+      `<div class="cos">` + tops.map(t => {
+        const head = `<div class="co-h"><b>${esc(disp(t.company))}</b><span>合計 <b class="${t.tokens ? 'blue' : ''}">${t.tokens ? fmtTokens(t.tokens) : '—'}</b></span></div>`;
+        if (!t.top.length) return `<div class="co">${head}<p class="co-none"><b>${t.people} 人皆使用網頁版或免費工具</b><br><small>(無 tokens 數字)</small></p><p class="co-meta">主要工具:<span>${esc(t.tools.join('、') || '—')}</span><br>主要應用:<span>${esc(t.purposes.join('、') || '—')}</span></p></div>`;
+        const restTok = deptsCur.filter(d => d.company === t.company).slice(t.top.length).reduce((a, d) => a + d.tokens, 0);
+        const foot = t.restDepts ? `另有 ${t.restDepts} 個部門,合計 ${fmtTokens(restTok)}` : (t.people > t.tokenPeople ? `其餘 ${t.people - t.tokenPeople} 人使用網頁版或免費工具` : '');
+        return `<div class="co">${head}` + t.top.map((d, k) => `<div class="co-d"><div class="co-r"><span><b class="blue">${k + 1}</b> <b>${esc(d.dept)}</b></span><b>${fmtTokens(d.tokens)}</b></div><div class="co-meta">${esc(d.tools.join('、'))} ・ ${esc(d.purposes.join('、') || '未註明用途')}</div></div>`).join('') + (foot ? `<div class="co-foot">${esc(foot)}</div>` : '') + `</div>`;
+      }).join('') + `</div>`));
 
-    const maxCat = Math.max(1, ...catTok.map(c => c.tokens));
-    slides.push(slide('第一部分・tokens 用量', catTok[0] ? `${esc(catTok[0].cat)}占 tokens 的 ${pctOf(catTok[0].tokens, catTotal)}%` : '本月沒有 tokens 資料', '用部門填寫的「導入工作應用」歸類,這些 tokens 主要用在哪裡。',
-      `<div class="hbars">` + catTok.map(c => `<div class="hrow hit"${tipAttr(`${c.cat}:${fmtTokens(c.tokens)}(占 ${pctTxt(c.tokens, catTotal)})`)}><div class="lab">${esc(c.cat)}</div><div class="track"><div class="bar-seg" style="width:${(c.tokens / maxCat * 100).toFixed(1)}%"></div></div><div class="val">${fmtTokens(c.tokens)}<small>占 ${pctTxt(c.tokens, catTotal)}</small></div></div>`).join('') + `</div>` +
-      `<h3 class="h3">主要部門實際填寫的用途</h3><div class="tablebox"><table><thead><tr><th>公司・部門</th><th class="n">tokens</th><th>用在哪裡(填報內容)</th><th>工具</th></tr></thead><tbody>` +
-      topDepts.map(d => `<tr><td>${esc(disp(d.company))}<br>${esc(d.dept)}</td><td class="n">${fmtTokens(d.tokens)}</td><td>${esc(d.purposes.join('、')) || '—'}</td><td>${esc(d.tools.join('、'))}</td></tr>`).join('') + `</tbody></table></div>` +
-      `<p class="note">一筆填寫若同時屬於好幾類,tokens 平均分配到各類。</p>`));
+    // ---- 第 3 頁:填報使用 AI 人數(本月長條 + 上月位置的直線,右邊寫增加幾人) ----
+    const maxN = Math.max(1, ...tops.map(t => Math.max(t.people, prev && prev.byCompany[t.company] ? prev.byCompany[t.company].people : 0)));
+    slides.push(slide('填報使用 AI 人數與工作應用', `${A.people} 人填報使用 AI${P && A.people > P.people ? `,較${esc(state._prevShort)}${hl('▲' + (A.people - P.people) + '人')}` : ''}`, `其中 ${noTok} 人使用網頁版或免費工具,tokens 無法統計,因此另以工作應用呈現。`,
+      `<div class="legend"><span><i style="background:var(--accent)"></i>有 tokens 數字</span><span><i style="background:var(--warm)"></i>使用網頁版或免費工具(無 tokens 數字)</span>${prev ? `<span><i class="mk-i"></i>${esc(state._prevShort)}人數</span>` : ''}</div><div class="hbars">` +
+      tops.map(t => {
+        const b = cur.byCompany[t.company], q = prev && prev.byCompany[t.company], pn = q ? q.people : null, d = pn == null ? null : b.people - pn;
+        const ch = pn == null ? '' : d > 0 ? `<small><span class="hl">▲${d} 人</span>(${esc(state._prevShort)} ${pn})</small>` : d === 0 ? `<small>與${esc(state._prevShort)}持平</small>` : `<small>${esc(state._prevShort)} ${pn} 人</small>`;
+        return `<div class="hrow hit"${tipAttr(`${disp(t.company)}:${state._curShort} ${b.people} 人(有 tokens 數字 ${b.tokenPeople}、網頁版或免費工具 ${b.noTokenPeople})${pn != null ? `;${state._prevShort} ${pn} 人` : ''}`)}><div class="lab"><b>${esc(disp(t.company))}</b></div><div class="track ptrack"><div class="stack" style="width:${(b.people / maxN * 100).toFixed(1)}%"><span class="s-a" style="flex:${b.tokenPeople}">${b.tokenPeople >= 3 ? b.tokenPeople : ''}</span><span class="s-b" style="flex:${b.noTokenPeople}">${b.noTokenPeople >= 3 ? b.noTokenPeople : ''}</span></div>${pn != null ? `<i class="mk" style="left:${(pn / maxN * 100).toFixed(1)}%"></i>` : ''}</div><div class="val"><b>${b.people} 人</b>${ch}</div></div>`;
+      }).join('') + `</div>` +
+      `<p class="note">長條為${esc(state._curShort)}人數${prev ? `,深灰直線為${esc(state._prevShort)}人數` : ''}。這是各公司「有填報的人數」,不是員工總數。</p>`));
 
-    // ---- 第二部分:人數、工作、工具 ----
+    // ---- 使用工具(PowerPoint 版已不放這頁,系統裡保留供參考) ----
     const byPeople = cur.companies.slice().sort((a, b) => cur.byCompany[b].people - cur.byCompany[a].people);
-    const rows4 = [];
-    byPeople.forEach(c => { const b = cur.byCompany[c]; rows4.push({ label: disp(c) + (prev ? `(${state._curShort})` : ''), a: b.tokenPeople, b: b.noTokenPeople, n: b.people }); if (prev && prev.byCompany[c]) { const q = prev.byCompany[c]; rows4.push({ label: `${disp(c)}(${state._prevShort})`, a: q.tokenPeople, b: q.noTokenPeople, n: q.people, old: true }); } });
-    const maxN = Math.max(1, ...rows4.map(r => r.n));
-    slides.push(slide('第二部分・使用人數與應用', `${A.people} 人填報使用 AI${P && A.people > P.people ? `,較${esc(state._prevShort)}增加 ${A.people - P.people} 人` : ''}`, `各公司有填報使用 AI 的人數。其中 ${noTok} 人(${pctOf(noTok, A.people)}%)使用網頁版或免費工具,tokens 無法統計,因此另以工作應用呈現。`,
-      `<div class="legend"><span><i style="background:var(--accent)"></i>有 tokens 數字</span><span><i style="background:var(--warm)"></i>使用網頁版或免費工具(無 tokens 數字)</span></div><div class="hbars">` +
-      rows4.map(r => `<div class="hrow hit"${tipAttr(`${r.label}:有 tokens 數字 ${r.a} 人、網頁版或免費工具 ${r.b} 人`)}><div class="lab">${esc(r.label)}</div><div class="track"><div class="stack" style="width:${(r.n / maxN * 100).toFixed(1)}%;${r.old ? 'opacity:.55' : ''}"><span class="s-a" style="flex:${r.a}"></span><span class="s-b" style="flex:${r.b}"></span></div></div><div class="val">${r.n} 人<small>${r.a} 人有 tokens 數字</small></div></div>`).join('') + `</div>` +
-      `<p class="note">這是各公司「有填報的人數」,不是員工總數。</p>`));
-
     const toolNames = Object.keys(A.tools).sort((a, b) => A.tools[b] - A.tools[a]).slice(0, 10);
     const maxC = Math.max(1, ...byPeople.map(c => cur.byCompany[c].people));
-    slides.push(slide('第二部分・使用人數與應用', toolNames[0] ? `${esc(toolNames[0])} 最多人用,共 ${A.tools[toolNames[0]]} 人` : '本月沒有工具資料', `各 AI 工具的使用人數(一個人用多個工具會各算一次),以及付費與免費的比例。`,
+    slides.push(slide('使用的 AI 工具', toolNames[0] ? `${esc(toolNames[0])} 最多人用,共 ${A.tools[toolNames[0]]} 人` : '本月沒有工具資料', `各 AI 工具的使用人數(一個人用多個工具會各算一次),以及付費與免費的比例。`,
       legendCmp() + hbars(toolNames.map(t => ({ label: t, cur: A.tools[t], prev: P ? (P.tools[t] || 0) : null })), { unit: ' 人' }) +
       `<h3 class="h3">付費與免費使用者</h3><div class="legend"><span><i style="background:var(--accent)"></i>付費方案(月費、年費、額度制)</span><span><i style="background:var(--accent-soft);border:1px solid var(--accent)"></i>免費方案</span></div><div class="hbars">` +
       byPeople.map(c => { const b = cur.byCompany[c]; const q = prev && prev.byCompany[c]; return `<div class="hrow hit"${tipAttr(`${disp(c)}:付費 ${b.paidPeople} 人、免費 ${b.freePeople} 人`)}><div class="lab">${esc(disp(c))}</div><div class="track"><div class="stack" style="width:${(b.people / maxC * 100).toFixed(1)}%"><span class="s-a" style="flex:${b.paidPeople}"></span><span class="s-c" style="flex:${b.freePeople}"></span></div></div><div class="val">${b.paidPeople} / ${b.freePeople}${q ? `<small>${esc(state._prevShort)} ${q.paidPeople} / ${q.freePeople}</small>` : ''}</div></div>`; }).join('') + `</div><p class="note">右側數字是「付費人數 / 免費人數」。</p>`));
