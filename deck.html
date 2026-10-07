@@ -695,7 +695,7 @@ if (typeof module !== 'undefined') module.exports = CORE;
     // ---- 第 3 頁:填報使用 AI 人數(每家公司一個框:本月深色、上月淺色;照 Michelle 在 PowerPoint 調整的版面) ----
     const maxN = Math.max(1, ...tops.map(t => Math.max(t.people, prev && prev.byCompany[t.company] ? prev.byCompany[t.company].people : 0)));
     const pRow = (label, s, old) => `<div class="hrow hit${old ? ' old' : ''}"${tipAttr(`${label}:${s.people} 人(有 tokens 數字 ${s.tokenPeople}、網頁版或免費工具 ${s.noTokenPeople})`)}><div class="lab">${esc(label)}</div><div class="track"><div class="stack" style="width:${(s.people / maxN * 100).toFixed(1)}%"><span class="s-a" style="flex:${s.tokenPeople}"></span><span class="s-b" style="flex:${s.noTokenPeople}"></span></div></div><div class="val">${s.people} 人</div></div>`;
-    slides.push(slide('填報使用 AI 人數與工作應用', `${A.people} 人填報使用 AI${P && A.people > P.people ? `,較${esc(state._prevShort)}${hl('▲' + (A.people - P.people) + '人')}` : ''}`, `其中 ${noTok} 人使用網頁版或免費工具,tokens 無法統計,因此另以工作應用呈現。`,
+    slides.push(slide('填報使用 AI 人數', `${A.people} 人填報使用 AI${P && A.people > P.people ? `,較${esc(state._prevShort)}${hl('▲' + (A.people - P.people) + '人')}` : ''}`, `其中 ${noTok} 人使用網頁版或免費工具,tokens 無法統計,因此另以工作應用呈現。`,
       `<div class="legend"><span><i style="background:var(--accent)"></i>有 tokens 數字</span><span><i style="background:var(--warm)"></i>使用網頁版或免費工具(無 tokens 數字)</span></div><div class="pgroups">` +
       tops.map(t => { const q = prev && prev.byCompany[t.company]; return `<div class="pgroup">${pRow(`${disp(t.company)} ${state._curShort}`, cur.byCompany[t.company], false)}${q ? pRow(`${disp(t.company)} ${state._prevShort}`, q, true) : ''}</div>`; }).join('') + `</div>`));
 
