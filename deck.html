@@ -117,13 +117,20 @@ select { background: var(--surface); border: 1px solid var(--line); border-radiu
 .co-meta { font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
 .co-meta span { color: var(--ink); }
 .co-none small { color: var(--muted); }
+.dn { color: #00a04a; }
+.co-h .hl { color: var(--bad); } .co-h .dn { color: #00a04a; }
+.muted { color: var(--muted); font-weight: 400; }
+.co-prev { display: block; text-align: right; font-size: 12px; color: var(--muted); }
+.cat-tools { grid-column: 1 / -1; font-size: 12.5px; color: var(--muted); margin-top: -4px; }
+.cat-tools span { color: var(--ink2); }
 .co-foot { font-size: 12.5px; color: var(--muted); margin-top: auto; padding-top: 4px; }
-.ptrack { position: relative; padding-block: 6px; }
-.ptrack .stack { height: 22px; }
-.ptrack .stack > span { color: #fff; font-size: 12px; font-weight: 700; text-align: center; line-height: 22px; overflow: hidden; }
-.mk { position: absolute; top: 0; bottom: 0; width: 3px; margin-left: -1.5px; background: var(--ink2); border-radius: 2px; }
-.mk-i { width: 3px !important; height: 16px !important; border-radius: 2px !important; background: var(--ink2); vertical-align: -3px !important; }
 .hrow .val b { font-weight: 700; }
+.pgroups { display: flex; flex-direction: column; }
+.pgroup { border: 1px solid var(--ink2); padding: 8px 12px; display: flex; flex-direction: column; gap: 6px; }
+.pgroup + .pgroup { border-top: 0; }
+.pgroup .hrow:not(.old) .lab, .pgroup .hrow:not(.old) .val { font-weight: 700; }
+.pgroup .hrow.old .lab, .pgroup .hrow.old .val { color: var(--muted); }
+.pgroup .hrow.old .stack { opacity: .45; }
 
 /* ---- 表格 ---- */
 .tablebox { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
@@ -243,7 +250,7 @@ const PURPOSE_CATEGORIES = [
 const AUTOMATION_RE = /自動|自动|一鍵|一键|批次|批量|rpa|agent|工作流|腳本|脚本|ilogic|vba|整合/i;
 
 // ---------- 簡體轉繁體(只轉常見的公司/部門/工具/應用用字,姓名不轉)----------
-const S2T_PAIRS = '涟漣硕碩营營业業务務资資财財产產总總门門质質经經体體术術宝寶关關发發应應纪紀录錄统統计計设設备備护護检檢验驗认認证證买買卖賣销銷户戶订訂单單种種类類电電脑腦软軟库庫图圖络絡网網动動态態视視频頻译譯议議论論让讓问問说說谢謝请請对對话話题題现現实實际際规規划劃试試测測报報处處员員联聯积積开開与與专專长長车車东東进進时時间間会會档檔询詢码碼简簡库庫资資寻尋导導应應该該贸貿资資仓倉储儲运運输輸购購货貨据據数數点點输輸出出库庫维維修修产產线線料料师師务務厂廠区區协協调調学學习習觉覺听聽认認确確绩績实實别別则則读讀写寫复復杂雜样樣线線结結构構优優势勢项項题題节節约約为為与與这這个個们們来來过過还還没沒从從发發现現让讓将將对對';
+const S2T_PAIRS = '涟漣硕碩营營业業务務资資财財产產总總门門质質经經体體术術宝寶关關发發应應纪紀录錄统統计計设設备備护護检檢验驗认認证證买買卖賣销銷户戶订訂单單种種类類电電脑腦软軟库庫图圖络絡网網动動态態视視频頻译譯议議论論让讓问問说說谢謝请請对對话話题題现現实實际際规規划劃试試测測报報处處员員联聯积積开開与與专專长長车車东東进進时時间間会會档檔询詢码碼简簡库庫资資寻尋导導应應该該贸貿资資仓倉储儲运運输輸购購货貨据據数數点點输輸出出库庫维維修修产產线線料料师師务務厂廠区區协協调調学學习習觉覺听聽认認确確绩績实實别別则則读讀写寫复復杂雜样樣线線结結构構优優势勢项項题題节節约約为為与與这這个個们們来來过過还還没沒从從发發现現让讓将將对對记記讯訊换換';
 const S2T = (() => { const m = {}; for (let i = 0; i + 1 < S2T_PAIRS.length; i += 2) m[S2T_PAIRS[i]] = S2T_PAIRS[i + 1]; return m; })();
 const toTrad = s => String(s == null ? '' : s).replace(/[一-鿿]/g, ch => S2T[ch] || ch);
 const clean = s => String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
@@ -456,27 +463,47 @@ function tokenDepts(rows) {
       purposes: topPhrases(rs, 4), tools: [...tools].sort((a, b) => b[1] - a[1]).slice(0, 3).map(e => e[0]) };
   }).sort((a, b) => b.tokens - a.tokens);
 }
-// 各公司 tokens 前 N 名「部門」(不列個人姓名)。tokens 少於 N 個部門的公司就只列有的;
-// 完全沒有 tokens 的公司(例如全部用免費網頁版),改列最常用的工具與工作應用,讓簡報上仍有內容可說明。
+// 各公司前 N 名「部門」(不列個人姓名)。2026-10-07 Michelle 規則:
+//   先依 tokens 排名;有 tokens 的部門不足 N 個時,用「填報人數最多」的其他部門補滿(這些部門 tokens=0、noTok=true)。
+//   完全沒有 tokens 的公司(例如漣水)就是直接列填報人數最多的 N 個部門。
+function deptInfo(rs) {
+  const tools = new Map(); rs.forEach(r => r.tools.forEach(t => tools.set(t, (tools.get(t) || 0) + 1)));
+  return { company: rs[0].company, dept: rs[0].dept, people: new Set(rs.map(personKey)).size,
+    purposes: topPhrases(rs, 4), tools: [...tools].sort((a, b) => b[1] - a[1]).slice(0, 3).map(e => e[0]) };
+}
 function companyTopDepts(rows, n) {
   n = n || 3;
   return sortCompanies([...new Set(rows.map(r => r.company))]).map(c => {
     const rs = rows.filter(r => r.company === c);
     const s = summarizeCompany(rs);
-    const depts = tokenDepts(rs);
-    const top = depts.slice(0, n);
-    const tools = Object.entries(s.tools).sort((a, b) => b[1] - a[1]).slice(0, 3).map(e => e[0]);
-    return { company: c, tokens: s.tokens, people: s.people, tokenPeople: s.tokenPeople, deptCount: depts.length, top,
-      restDepts: depts.length - top.length, tools, purposes: topPhrases(rs, 3) };
+    const tokDepts = tokenDepts(rs);
+    const top = tokDepts.slice(0, n).map(d => ({ ...d, people: new Set(rs.filter(r => r.dept === d.dept).map(personKey)).size, noTok: false }));
+    const others = [...new Set(rs.map(r => r.dept))].filter(d => !tokDepts.some(t => t.dept === d))
+      .map(d => ({ ...deptInfo(rs.filter(r => r.dept === d)), tokens: 0, noTok: true }))
+      .sort((a, b) => b.people - a.people || a.dept.localeCompare(b.dept, 'zh-Hant'));
+    top.push(...others.slice(0, Math.max(0, n - top.length)));
+    const allDepts = new Set(rs.map(r => r.dept)).size;
+    const shownTok = top.reduce((a, d) => a + d.tokens, 0);
+    return { company: c, tokens: s.tokens, people: s.people, tokenPeople: s.tokenPeople, deptCount: tokDepts.length, top,
+      restDepts: allDepts - top.length, restTokens: s.tokens - shownTok, restPeople: s.people - top.reduce((a, d) => a + d.people, 0) };
   });
 }
+// tokens 依「導入工作應用」分類加總;同時記下每一類用了哪些 AI 工具(依 tokens 多寡排序)。
+// 「其他(未註明應用)」= 有 tokens 但沒有填工作應用(2026-10-07 Michelle 把「用途」改稱「應用」)。
+const OTHER_CAT = '其他(未註明應用)';
 function tokenByCategory(rows) {
-  const out = {};
+  const out = {}, tools = {};
   rows.filter(r => r.tokens != null && r.tokens > 0).forEach(r => {
-    const cats = r.cats.length ? r.cats : ['其他(未註明用途)'];
-    cats.forEach(c => { out[c] = (out[c] || 0) + r.tokens / cats.length; });
+    const cats = r.cats.length ? r.cats : [OTHER_CAT];
+    cats.forEach(c => {
+      const share = r.tokens / cats.length;
+      out[c] = (out[c] || 0) + share;
+      const tm = tools[c] || (tools[c] = {});
+      r.tools.forEach(t => { tm[t] = (tm[t] || 0) + share / r.tools.length; });
+    });
   });
-  return Object.entries(out).map(([cat, tokens]) => ({ cat, tokens })).sort((a, b) => b.tokens - a.tokens);
+  return Object.entries(out).map(([cat, tokens]) => ({ cat, tokens, tools: Object.entries(tools[cat] || {}).sort((a, b) => b[1] - a[1]).map(e => e[0]) }))
+    .sort((a, b) => (a.cat === OTHER_CAT) - (b.cat === OTHER_CAT) || b.tokens - a.tokens);   // 「其他」固定排最後
 }
 
 // ---------- 自動化案例 ----------
@@ -641,42 +668,36 @@ if (typeof module !== 'undefined') module.exports = CORE;
 
     // 公司依 COMPANY_ORDER 排列(南京、台灣、漣水、碩量)
     const tops = companyTopDepts(cur.rows, 3);
-    const deptsCur = tokenDepts(cur.rows);
     const byTok = tops.slice().sort((a, b) => b.tokens - a.tokens);
     const topCo = byTok[0];
-    const topCoCat = topCo && tokenByCategory(cur.rows.filter(r => r.company === topCo.company))[0];
-    const hl = s => `<span class="hl">${s}</span>`;
+        const hl = s => `<span class="hl">${s}</span>`;
 
-    // ---- 第 1 頁:集團 tokens 合計 → 各公司 tokens 總數 ----
-    // (2026-10-07 Michelle:拿掉「有 tokens 數字的人」「有填導入工作應用」;各公司只列本月,不和上月比)
+    // ---- 第 1 頁:集團 tokens 合計 + 各公司前三名部門(與 PowerPoint 第1頁相同,Michelle 2026-10-07 定稿) ----
+    // 排名規則見 core.js companyTopDepts。各公司與上月比較只用箭頭(紅▲、綠▼)+ 灰字上月數字,不寫 %。
     const up = P && P.tokens && A.tokens >= P.tokens;
-    const maxCo = Math.max(1, ...tops.map(t => t.tokens));
     slides.push(slide('集團各公司 AI 使用統計', `${esc(state._curShort)}集團 tokens 合計 ${hl(fmtTokens(A.tokens))}${up ? `,較${esc(state._prevShort)} ${hl('▲' + Math.round((A.tokens / P.tokens - 1) * 100) + '%')}` : ''}`,
-      `${esc(monthLabel(m))}・${A.companies} 家公司、${A.depts} 個部門填報。以下依公司列出 tokens 總數。`,
-      `<div class="hbars">` + tops.map(t => `<div class="hrow hit"${tipAttr(`${disp(t.company)}:${t.tokens ? fmtTokens(t.tokens) : '使用網頁版或免費工具'}`)}><div class="lab"><b>${esc(disp(t.company))}</b><div class="sub">${t.tokenPeople ? `${t.deptCount} 個部門、${t.tokenPeople} 人有 tokens 數字` : '使用網頁版或免費工具'}</div></div><div class="track">${t.tokens ? `<div class="bar-seg" style="width:${(t.tokens / maxCo * 100).toFixed(1)}%"></div>` : ''}</div><div class="val">${t.tokens ? fmtTokens(t.tokens) : '—'}<small>${t.tokens ? `占 ${pctTxt(t.tokens, A.tokens)}` : '無 tokens 數字'}</small></div></div>`).join('') + `</div>` +
-      (topCo ? `<p class="takeaway" style="margin-top:22px">${esc(state._curShort)} tokens 合計 ${fmtTokens(A.tokens)},其中${esc(disp(topCo.company))}占 ${pctOf(topCo.tokens, A.tokens)}%${topCoCat ? `,主要用在${esc(topCoCat.cat)}` : ''}。各公司用量前三名的部門,請見下一頁。</p>` : ''), 'cover'));
-
-    // ---- 第 2 頁:各公司 tokens 前三名部門 + 用在哪裡(只到公司、部門,不列姓名) ----
-    const best = deptsCur[0];
-    slides.push(slide('各公司 tokens 前三名部門', best ? `${esc(disp(best.company))}・${esc(best.dept)} 占集團 tokens 的 ${hl(pctTxt(best.tokens, A.tokens))}` : '本月沒有 tokens 資料', '',
+      `以下統計集團 ${A.companies} 家公司、${A.depts} 個部門填報,依公司別列出 tokens${topCo && topCo.tokens ? `,<b>${esc(state._curShort)}${esc(disp(topCo.company))}占 ${pctOf(topCo.tokens, A.tokens)}%</b>` : ''}。`,
       `<div class="cos">` + tops.map(t => {
-        const head = `<div class="co-h"><b>${esc(disp(t.company))}</b><span>合計 <b class="${t.tokens ? 'blue' : ''}">${t.tokens ? fmtTokens(t.tokens) : '—'}</b></span></div>`;
-        if (!t.top.length) return `<div class="co">${head}<p class="co-none"><b>${t.people} 人皆使用網頁版或免費工具</b><br><small>(無 tokens 數字)</small></p><p class="co-meta">主要工具:<span>${esc(t.tools.join('、') || '—')}</span><br>主要應用:<span>${esc(t.purposes.join('、') || '—')}</span></p></div>`;
-        const restTok = deptsCur.filter(d => d.company === t.company).slice(t.top.length).reduce((a, d) => a + d.tokens, 0);
-        const foot = t.restDepts ? `另有 ${t.restDepts} 個部門,合計 ${fmtTokens(restTok)}` : (t.people > t.tokenPeople ? `其餘 ${t.people - t.tokenPeople} 人使用網頁版或免費工具` : '');
-        return `<div class="co">${head}` + t.top.map((d, k) => `<div class="co-d"><div class="co-r"><span><b class="blue">${k + 1}</b> <b>${esc(d.dept)}</b></span><b>${fmtTokens(d.tokens)}</b></div><div class="co-meta">${esc(d.tools.join('、'))} ・ ${esc(d.purposes.join('、') || '未註明用途')}</div></div>`).join('') + (foot ? `<div class="co-foot">${esc(foot)}</div>` : '') + `</div>`;
+        const q = prev && prev.byCompany[t.company];
+        const arrow = q && t.tokens !== q.tokens && (t.tokens || q.tokens) ? (t.tokens > q.tokens ? '<span class="hl">▲</span>' : '<span class="dn">▼</span>') : '';
+        const head = `<div class="co-h"><b>${esc(disp(t.company))}</b><span>${arrow}合計 <b class="${t.tokens ? 'blue' : ''}">${t.tokens ? fmtTokens(t.tokens) : '—'}</b>${q ? `<small class="co-prev">${esc(state._prevShort)} ${q.tokens ? fmtTokens(q.tokens) : '—'}</small>` : ''}</span></div>`;
+        const foot = t.restDepts ? `另有 ${t.restDepts} 個部門、${t.restPeople} 人填報${t.restTokens > 0 ? `,tokens 合計 ${fmtTokens(t.restTokens)}` : ''}` : '';
+        return `<div class="co">${head}` + t.top.map((d, k) => `<div class="co-r"><span><b class="blue">${k + 1}</b> <b>${esc(d.dept)}</b> <small class="muted">${d.people} 人填報</small></span>${d.noTok ? '<small class="muted">網頁版/免費</small>' : `<b>${fmtTokens(d.tokens)}</b>`}</div>`).join('') + (foot ? `<div class="co-foot">${esc(foot)}</div>` : '') + `</div>`;
       }).join('') + `</div>`));
 
-    // ---- 第 3 頁:填報使用 AI 人數(本月長條 + 上月位置的直線,右邊寫增加幾人) ----
+    // ---- 第 2 頁:tokens 用在哪裡(依導入工作應用分類,每一類註明使用的 AI 工具;「其他」排最後) ----
+    const catTok = tokenByCategory(cur.rows), catTotal = catTok.reduce((a, c) => a + c.tokens, 0), maxCat = Math.max(1, ...catTok.map(c => c.tokens));
+    const lead = catTok.filter(c => !/^其他/.test(c.cat))[0];
+    slides.push(slide('tokens 用在哪裡', lead ? `${hl(esc(lead.cat))} 占 tokens 的 ${pctOf(lead.tokens, catTotal)}%` : '本月沒有 tokens 資料', '依各部門填寫的「導入工作應用」歸類,並註明使用的 AI 工具。',
+      `<div class="hbars">` + catTok.map(c => `<div class="hrow hit"${tipAttr(`${c.cat}:${fmtTokens(c.tokens)}(占 ${pctTxt(c.tokens, catTotal)});AI 工具:${c.tools.join('、')}`)}><div class="lab">${esc(c.cat)}</div><div class="track"><div class="bar-seg" style="width:${(c.tokens / maxCat * 100).toFixed(1)}%"></div></div><div class="val">${fmtTokens(c.tokens)}<small>占 ${pctTxt(c.tokens, catTotal)}</small></div><div class="cat-tools">AI 工具:<span>${esc(c.tools.slice(0, 5).join('、') || '—')}</span></div></div>`).join('') + `</div>` +
+      `<p class="note">一筆填寫若同時屬於好幾類,tokens 平均分配到各類;「其他」為有 tokens 但未填導入工作應用。</p>`));
+
+    // ---- 第 3 頁:填報使用 AI 人數(每家公司一個框:本月深色、上月淺色;照 Michelle 在 PowerPoint 調整的版面) ----
     const maxN = Math.max(1, ...tops.map(t => Math.max(t.people, prev && prev.byCompany[t.company] ? prev.byCompany[t.company].people : 0)));
+    const pRow = (label, s, old) => `<div class="hrow hit${old ? ' old' : ''}"${tipAttr(`${label}:${s.people} 人(有 tokens 數字 ${s.tokenPeople}、網頁版或免費工具 ${s.noTokenPeople})`)}><div class="lab">${esc(label)}</div><div class="track"><div class="stack" style="width:${(s.people / maxN * 100).toFixed(1)}%"><span class="s-a" style="flex:${s.tokenPeople}"></span><span class="s-b" style="flex:${s.noTokenPeople}"></span></div></div><div class="val">${s.people} 人</div></div>`;
     slides.push(slide('填報使用 AI 人數與工作應用', `${A.people} 人填報使用 AI${P && A.people > P.people ? `,較${esc(state._prevShort)}${hl('▲' + (A.people - P.people) + '人')}` : ''}`, `其中 ${noTok} 人使用網頁版或免費工具,tokens 無法統計,因此另以工作應用呈現。`,
-      `<div class="legend"><span><i style="background:var(--accent)"></i>有 tokens 數字</span><span><i style="background:var(--warm)"></i>使用網頁版或免費工具(無 tokens 數字)</span>${prev ? `<span><i class="mk-i"></i>${esc(state._prevShort)}人數</span>` : ''}</div><div class="hbars">` +
-      tops.map(t => {
-        const b = cur.byCompany[t.company], q = prev && prev.byCompany[t.company], pn = q ? q.people : null, d = pn == null ? null : b.people - pn;
-        const ch = pn == null ? '' : d > 0 ? `<small><span class="hl">▲${d} 人</span>(${esc(state._prevShort)} ${pn})</small>` : d === 0 ? `<small>與${esc(state._prevShort)}持平</small>` : `<small>${esc(state._prevShort)} ${pn} 人</small>`;
-        return `<div class="hrow hit"${tipAttr(`${disp(t.company)}:${state._curShort} ${b.people} 人(有 tokens 數字 ${b.tokenPeople}、網頁版或免費工具 ${b.noTokenPeople})${pn != null ? `;${state._prevShort} ${pn} 人` : ''}`)}><div class="lab"><b>${esc(disp(t.company))}</b></div><div class="track ptrack"><div class="stack" style="width:${(b.people / maxN * 100).toFixed(1)}%"><span class="s-a" style="flex:${b.tokenPeople}">${b.tokenPeople >= 3 ? b.tokenPeople : ''}</span><span class="s-b" style="flex:${b.noTokenPeople}">${b.noTokenPeople >= 3 ? b.noTokenPeople : ''}</span></div>${pn != null ? `<i class="mk" style="left:${(pn / maxN * 100).toFixed(1)}%"></i>` : ''}</div><div class="val"><b>${b.people} 人</b>${ch}</div></div>`;
-      }).join('') + `</div>` +
-      `<p class="note">長條為${esc(state._curShort)}人數${prev ? `,深灰直線為${esc(state._prevShort)}人數` : ''}。這是各公司「有填報的人數」,不是員工總數。</p>`));
+      `<div class="legend"><span><i style="background:var(--accent)"></i>有 tokens 數字</span><span><i style="background:var(--warm)"></i>使用網頁版或免費工具(無 tokens 數字)</span></div><div class="pgroups">` +
+      tops.map(t => { const q = prev && prev.byCompany[t.company]; return `<div class="pgroup">${pRow(`${disp(t.company)} ${state._curShort}`, cur.byCompany[t.company], false)}${q ? pRow(`${disp(t.company)} ${state._prevShort}`, q, true) : ''}</div>`; }).join('') + `</div>`));
 
     // ---- 使用工具(PowerPoint 版已不放這頁,系統裡保留供參考) ----
     const byPeople = cur.companies.slice().sort((a, b) => cur.byCompany[b].people - cur.byCompany[a].people);
