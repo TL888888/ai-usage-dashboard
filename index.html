@@ -250,6 +250,7 @@
   .import-box .drop-zone.dragover { border-color: var(--blue); background: #eef4ff; }
   /* 儲值餘額提醒：任一供應商估計已用 ≥ 70% 時，頁面最上方的紅色橫幅 */
   .credit-alert { background: #fef2f2; border: 1px solid #fca5a5; color: #b91c1c; border-radius: 10px; padding: 12px 16px; margin-bottom: 16px; font-size: 14px; font-weight: 600; line-height: 1.7; }
+  .credit-alert.yellow { background: #fffbeb; border-color: #fcd34d; color: #92400e; }
   .credit-alert small { display: block; font-weight: 400; color: #7f1d1d; font-size: 12.5px; }
   .pct-bar { height: 8px; background: #eef2f7; border-radius: 4px; overflow: hidden; min-width: 90px; margin-top: 4px; }
   .pct-bar > span { display: block; height: 100%; background: var(--blue); }
@@ -382,6 +383,7 @@
 
   <div class="container">
     <div id="credit-alert" class="credit-alert" style="display:none;"></div>
+    <div id="credit-alert-yellow" class="credit-alert yellow" style="display:none;"></div>
 
     <div class="tab-panel" id="tab-deck">
       <iframe id="deck-frame" src="deck.html" title="經營會議簡報" allow="fullscreen" allowfullscreen style="width:100%; height:calc(100vh - 190px); min-height:620px; border:1px solid var(--line, #dde3e9); border-radius:12px; background:#fff;"></iframe>
@@ -411,73 +413,151 @@
       <div class="summary-row" id="summary-row"></div>
 
       <section class="panel">
-        <h2>儲值與餘額（依供應商）</h2>
+        <h2>各系統 tokens 與實際花費</h2>
         <p class="import-note" style="padding:0 20px;">
-          ⚠️ 這裡的「已用」是系統依每次問答的 tokens <b>估算</b>的，可能跟供應商實際帳單有落差。建議每月到
-          <a href="https://aistudio.google.com/" target="_blank" rel="noopener">Google AI Studio</a>、
-          <a href="https://deepinfra.com/dash/billing" target="_blank" rel="noopener">DeepInfra 帳單頁</a>
-          看一次「剩餘餘額」，用下面的「對帳」記下來，系統就會改用實際餘額往後估算。<br>
-          已用達 <b>70%</b>（剩 30%）時，頁面最上方會出現紅色提醒。這張表跟上面選的日期區間無關，一律從儲值日（或最近一次對帳）算到現在。
+          依上面選的日期區間。<b>tokens</b> 是我們各系統自己記錄的；<b>實際花費</b>一律用供應商的實際數字，不用 tokens 推算。<br>
+          Gemini 依系統的花費來自「每月依 Key 實際花費」（每月到 AI Studio 抄一次），所以<b>只有選「整個月」時才有數字</b>，其他區間顯示「—」。
         </p>
         <div class="table-scroll">
-          <table id="credit-table">
+          <table id="sys-spend-table">
             <thead>
               <tr>
-                <th>供應商</th>
-                <th class="num">已儲值</th>
-                <th class="num">估計已用</th>
-                <th class="num">估計剩餘</th>
-                <th>已用比例</th>
-                <th>計算方式</th>
+                <th>系統</th>
+                <th class="num">DeepInfra tokens</th>
+                <th class="num">DeepInfra 實際花費</th>
+                <th class="num">Gemini tokens</th>
+                <th class="num">Gemini 實際花費</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+            <tfoot></tfoot>
+          </table>
+        </div>
+        <div class="empty-note" style="display:none;">這段期間沒有任何用量紀錄</div>
+        <div id="sys-spend-note" class="import-note" style="padding:0 20px 14px;"></div>
+      </section>
+
+      <section class="panel">
+        <h2>每日餘額（實際）</h2>
+        <p class="import-note" style="padding:0 20px;">
+          餘額＝儲值 − 實際花費。DeepInfra 由網站每天晚上自動到 DeepInfra 抓一次實際餘額；
+          <b>Gemini 沒有辦法自動抓</b>（Google 規定餘額只能在 AI Studio 帳單頁看），只有您手動填過實際餘額的那幾天才有數字。
+          沒有實際紀錄的日子顯示「—」，不會用估算去補。當天花費＝前一天餘額＋當天儲值−當天餘額。
+        </p>
+        <div id="daily-summary" style="padding:6px 20px 0;font-size:13px;"></div>
+        <div class="table-scroll" style="max-height:460px;overflow-y:auto;">
+          <table id="daily-table">
+            <thead>
+              <tr>
+                <th>日期</th>
+                <th class="num">DeepInfra 儲值</th>
+                <th class="num">DeepInfra 當天花費</th>
+                <th class="num">DeepInfra 餘額</th>
+                <th class="num">Gemini 儲值</th>
+                <th class="num">Gemini 當天花費</th>
+                <th class="num">Gemini 餘額</th>
               </tr>
             </thead>
             <tbody></tbody>
           </table>
         </div>
-        <div class="empty-note" id="credit-empty-note" style="display:none;">還沒有任何儲值紀錄，請用下面的表單新增</div>
+        <div class="empty-note" style="display:none;">這段期間沒有資料</div>
+      </section>
 
-        <h3 style="margin:18px 20px 0;font-size:14px;">新增 / 修改儲值紀錄</h3>
+      <section class="panel">
+        <h2>每月依 Key 實際花費（Gemini，手動抄 AI Studio）</h2>
+        <details style="padding:0 20px;font-size:13px;line-height:1.8;">
+          <summary style="cursor:pointer;color:var(--blue);">📖 怎麼抄？（點這裡看步驟）</summary>
+          <ol style="margin:6px 0 0;padding-left:20px;">
+            <li>用瀏覽器打開 <a href="https://aistudio.google.com/" target="_blank" rel="noopener">aistudio.google.com</a>，用公司的 Google 帳號登入。</li>
+            <li>點左邊選單的「Dashboard」→「Usage」（或「Spend」），會看到「Gemini API Spend」頁面。</li>
+            <li>上方日期區間選<b>上個月 1 日到最後一天</b>。</li>
+            <li>先<b>不要</b>選任何 Key，畫面上的「Your Total Cost」就是<b>總計</b>，抄到下面「總計（不篩選 Key）」那一格。</li>
+            <li>再點「API Keys」篩選，<b>一次只勾一把</b>（例如 GEMINI_API_KEY_SECRETARY），把「Your Total Cost」抄到下面同名的那一格。每把 Key 都做一次。</li>
+            <li>清單裡有、但下面沒有的 Key（例如同事的「Guard system」），在最下面「其他 Key 名稱」填名字和金額。</li>
+            <li>全部填完按「儲存這個月」。金額照 AI Studio 顯示的數字抄（目前設定是<b>台幣</b>）。</li>
+          </ol>
+        </details>
+        <div class="credit-form">
+          <label>月份：</label>
+          <input type="month" id="keyspend-month" onchange="loadKeySpendGrid()" />
+          <span style="color:var(--muted);">幣別：<b id="keyspend-currency">—</b></span>
+        </div>
+        <div class="table-scroll">
+          <table id="keyspend-table">
+            <thead><tr><th>Key</th><th>這把 Key 的系統（依我們的紀錄）</th><th class="num">當月實際花費</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="credit-form">
+          <input type="text" id="keyspend-extra-name" placeholder="其他 Key 名稱（例：Guard system）" style="min-width:200px;" />
+          <input type="number" id="keyspend-extra-amount" placeholder="金額" min="0" step="any" />
+          <button class="btn-mini" onclick="saveKeySpendGrid()">儲存這個月</button>
+          <span id="keyspend-msg" style="font-size:12.5px;"></span>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>儲值紀錄與實際餘額</h2>
+        <p class="import-note" style="padding:0 20px;">
+          已用達 <b>70%</b>（剩 30%）時，頁面最上方會出現紅色提醒；Gemini 超過 30 天沒填實際餘額會出現黃色提醒。
+          金額一律用供應商的幣別：Gemini＝<b id="cur-gemini">台幣</b>、DeepInfra＝<b id="cur-deepinfra">美金</b>。
+        </p>
+        <div class="table-scroll">
+          <table id="latest-table">
+            <thead><tr><th>供應商</th><th class="num">累計儲值</th><th class="num">最新實際餘額</th><th>已用比例</th><th>餘額資料時間</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <h3 style="margin:18px 20px 0;font-size:14px;">① 儲值紀錄（每次儲值後新增一筆）</h3>
         <div class="credit-form" id="topup-form">
           <input type="hidden" id="topup-id" />
-          <select id="topup-provider"><option value="gemini">Gemini（Google）</option><option value="deepinfra">DeepInfra</option></select>
+          <select id="topup-provider" onchange="syncCurrencyLabels()"><option value="gemini">Gemini（Google）</option><option value="deepinfra">DeepInfra</option></select>
           <input type="date" id="topup-date" title="儲值日期" />
-          <input type="number" id="topup-amount" placeholder="金額" min="0" step="any" />
-          <select id="topup-currency" onchange="toggleRateInput('topup')"><option value="TWD">台幣 NT$</option><option value="USD">美金 US$</option></select>
-          <span id="topup-rate-wrap">匯率 1 美金 = <input type="number" id="topup-rate" value="32" min="1" step="any" style="width:70px;" /> 台幣</span>
-          <input type="text" id="topup-note" class="note" placeholder="備註（例：日期不確定，約略填寫）" />
+          <input type="number" id="topup-amount" placeholder="儲值金額" min="0" step="any" />
+          <span id="topup-currency-label" style="color:var(--muted);"></span>
+          <input type="text" id="topup-note" class="note" placeholder="備註" />
           <button class="btn-mini" onclick="saveTopup()" id="topup-save-btn">新增儲值</button>
           <button class="link-btn" onclick="resetTopupForm()" id="topup-cancel-btn" style="display:none;">取消修改</button>
         </div>
+        <div id="topup-error" style="color:var(--red); font-size:12.5px; padding:0 20px; display:none;"></div>
         <div class="table-scroll">
           <table id="topup-table">
-            <thead><tr><th>供應商</th><th>儲值日期</th><th class="num">金額</th><th class="num">換算美金</th><th>備註</th><th>填寫人</th><th></th></tr></thead>
+            <thead><tr><th>供應商</th><th>儲值日期</th><th class="num">金額</th><th>備註</th><th>填寫人</th><th></th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
 
-        <h3 style="margin:18px 20px 0;font-size:14px;">對帳（依實際帳單校正）</h3>
-        <p class="import-note" style="padding:0 20px;margin-top:4px;">到供應商帳單頁看「目前剩餘餘額」填進來。系統會以「最近一次對帳的餘額」為準，再扣掉之後的估算花費、加上之後的儲值。</p>
-        <div class="credit-form" id="check-form">
-          <select id="check-provider"><option value="gemini">Gemini（Google）</option><option value="deepinfra">DeepInfra</option></select>
-          <input type="date" id="check-date" title="對帳日期" />
-          <input type="number" id="check-amount" placeholder="帳單上的剩餘餘額" min="0" step="any" style="width:150px;" />
-          <select id="check-currency" onchange="toggleRateInput('check')"><option value="TWD">台幣 NT$</option><option value="USD">美金 US$</option></select>
-          <span id="check-rate-wrap">匯率 1 美金 = <input type="number" id="check-rate" value="32" min="1" step="any" style="width:70px;" /> 台幣</span>
-          <input type="text" id="check-note" class="note" placeholder="備註" />
-          <button class="btn-mini" onclick="saveBillingCheck()">新增對帳</button>
+        <h3 style="margin:18px 20px 0;font-size:14px;">② 手動填實際餘額（Gemini 每月一次；DeepInfra 平常自動抓，不用填）</h3>
+        <p class="import-note" style="padding:0 20px;margin-top:4px;">
+          Gemini：打開 <a href="https://aistudio.google.com/billing" target="_blank" rel="noopener">AI Studio 帳單頁（Billing）</a>，把畫面上的「剩餘餘額」抄進來。日期選今天，系統會記成「現在」的餘額。
+        </p>
+        <div class="credit-form" id="snap-form">
+          <select id="snap-provider" onchange="syncCurrencyLabels()"><option value="gemini">Gemini（Google）</option><option value="deepinfra">DeepInfra</option></select>
+          <input type="date" id="snap-date" title="這個餘額是哪一天看到的" />
+          <input type="number" id="snap-amount" placeholder="帳單上的剩餘餘額" min="0" step="any" style="width:150px;" />
+          <span id="snap-currency-label" style="color:var(--muted);"></span>
+          <input type="text" id="snap-note" class="note" placeholder="備註" />
+          <button class="btn-mini" onclick="saveSnapshot()">記錄實際餘額</button>
         </div>
-        <div class="table-scroll">
-          <table id="check-table">
-            <thead><tr><th>供應商</th><th>對帳日期</th><th class="num">帳單剩餘餘額</th><th class="num">換算美金</th><th>備註</th><th>填寫人</th><th></th></tr></thead>
+        <div id="snap-error" style="color:var(--red); font-size:12.5px; padding:0 20px; display:none;"></div>
+        <div class="credit-form">
+          <button class="btn-mini" onclick="fetchDeepinfraNow(false)">立即抓 DeepInfra 餘額</button>
+          <button class="link-btn" onclick="fetchDeepinfraNow(true)">測試連線（不記錄）</button>
+          <span id="deepinfra-msg" style="font-size:12.5px;"></span>
+        </div>
+        <div class="table-scroll" style="max-height:320px;overflow-y:auto;">
+          <table id="snap-table">
+            <thead><tr><th>供應商</th><th>時間</th><th class="num">實際餘額</th><th>來源</th><th>備註</th><th></th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
-        <div id="credit-error" style="color:var(--red); font-size:12.5px; padding:0 20px 14px; display:none;"></div>
       </section>
 
       <section class="panel">
         <h2>依 API Key 統計</h2>
-        <p class="import-note" style="padding:0 20px;">依上面選的日期區間統計。Key 名稱大小寫不同的視為同一把；供應商「google」「gemini」都算 Gemini。</p>
+        <p class="import-note" style="padding:0 20px;">依上面選的日期區間統計（只有 tokens，實際花費請看上面「各系統 tokens 與實際花費」）。Key 名稱大小寫不同的視為同一把；供應商「google」「gemini」都算 Gemini。</p>
         <div class="table-scroll">
           <table id="key-table">
             <thead>
@@ -487,7 +567,6 @@
                 <th>使用的系統</th>
                 <th class="num">次數</th>
                 <th class="num">總Token</th>
-                <th class="num">估計花費 (USD)</th>
                 <th>最近一次使用</th>
               </tr>
             </thead>
@@ -506,7 +585,6 @@
                 <th>系統</th>
                 <th class="num">問答次數</th>
                 <th class="num">總Token</th>
-                <th class="num">估計花費 (USD)</th>
                 <th class="num">快取命中</th>
               </tr>
             </thead>
@@ -525,7 +603,6 @@
                 <th>提問者</th>
                 <th class="num">問答次數</th>
                 <th class="num">總Token</th>
-                <th class="num">估計花費 (USD)</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -545,7 +622,6 @@
                 <th>提問者</th>
                 <th class="num">輸入Token</th>
                 <th class="num">輸出Token</th>
-                <th class="num">花費 (USD)</th>
                 <th>備註</th>
               </tr>
             </thead>
@@ -839,7 +915,7 @@ async function loadData() {
     start = rangeStartISO(currentRange);
     end = null;
   }
-  let recentQuery = sb.from('ai_usage_events').select('created_at, system_name, asker_email, prompt_tokens, completion_tokens, estimated_cost_usd, cache_hit')
+  let recentQuery = sb.from('ai_usage_events').select('created_at, system_name, asker_email, prompt_tokens, completion_tokens, cache_hit')
     .order('created_at', { ascending: false }).limit(100);
   if (start) recentQuery = recentQuery.gte('created_at', start);
   if (end) recentQuery = recentQuery.lt('created_at', end);
@@ -860,6 +936,7 @@ async function loadData() {
     recentEvents = recentResult.data || [];
   }
   render();
+  loadSpendTables(start, end);
 }
 
 function render() {
@@ -880,7 +957,6 @@ function renderSummary() {
   wrap.innerHTML = `
     <div class="summary-card"><div class="label">問答總次數</div><div class="value">${fmtInt(Number(t.count))}</div></div>
     <div class="summary-card"><div class="label">總Token數</div><div class="value">${fmtInt(Number(t.tokens))}</div></div>
-    <div class="summary-card"><div class="label">估計總花費</div><div class="value cost">${fmtMoney(Number(t.cost))}</div></div>
     <div class="summary-card"><div class="label">快取命中次數</div><div class="value">${fmtInt(Number(t.cache_hits))}</div></div>
   `;
 }
@@ -946,7 +1022,6 @@ function renderKeyTable() {
       <td>${(k.systems || []).map(sn => `<span class="badge">${escapeHtml(SYSTEM_LABELS[sn] || sn)}</span>`).join(' ')}</td>
       <td class="num">${fmtInt(Number(k.cnt))}</td>
       <td class="num">${fmtInt(Number(k.tokens))}</td>
-      <td class="num">${fmtMoney(Number(k.cost))}</td>
       <td>${k.last_used ? fmtDate(k.last_used) : '—'}</td>
     </tr>
   `));
@@ -959,7 +1034,6 @@ function renderSystemTable() {
       <td class="system-name-cell">${escapeHtml(SYSTEM_LABELS[g.system_name] || g.system_name)}<br><span style="font-size:11px;color:var(--muted);font-weight:400;">${escapeHtml(g.system_name)}</span></td>
       <td class="num">${fmtInt(Number(g.cnt))}</td>
       <td class="num">${fmtInt(Number(g.tokens))}</td>
-      <td class="num">${fmtMoney(Number(g.cost))}</td>
       <td class="num">${Number(g.cache_hits) > 0 ? `<span class="cache-badge">${g.cache_hits}</span>` : '—'}</td>
     </tr>
   `));
@@ -972,7 +1046,6 @@ function renderAskerTable() {
       <td>${escapeHtml(g.asker_email)}</td>
       <td class="num">${fmtInt(Number(g.cnt))}</td>
       <td class="num">${fmtInt(Number(g.tokens))}</td>
-      <td class="num">${fmtMoney(Number(g.cost))}</td>
     </tr>
   `));
 }
@@ -985,83 +1058,272 @@ function renderRecentTable() {
       <td>${escapeHtml(e.asker_email || '—')}</td>
       <td class="num">${fmtInt(e.prompt_tokens)}</td>
       <td class="num">${fmtInt(e.completion_tokens)}</td>
-      <td class="num">${fmtMoney(Number(e.estimated_cost_usd))}</td>
       <td>${e.cache_hit ? '<span class="cache-badge">快取命中</span>' : ''}</td>
     </tr>
   `));
 }
 
 // ══════════════════════════════════════════════════════════
-// 儲值與餘額：儲值紀錄（ai_credit_topups）、對帳紀錄（ai_billing_checks）、
-// 餘額由資料庫函式 ai_credit_status() 算（已儲值 − 估計已用；有對帳就以最近一次對帳的實際餘額為準）
+// 實際花費與餘額（2026-10-16 Michelle 決定：tokens 歸 tokens，費用一律看供應商實際數字，不用 tokens 推算）
+//   儲值紀錄          ai_credit_topups（金額用供應商幣別）
+//   實際餘額紀錄      ai_balance_snapshots（DeepInfra 由 api/deepinfra-snapshot.js 每天自動抓；Gemini 手動填）
+//   每月實際花費      ai_monthly_spend（Gemini 每月到 AI Studio 依 Key 抄；DeepInfra 月總計自動抓）
+//   每日餘額          資料庫函式 ai_daily_balance()；最新餘額與提醒 ai_latest_balance()
+//   以上都在 sql/2026-10-16b_實際花費與每日餘額.sql
 // ══════════════════════════════════════════════════════════
-const CREDIT_ALERT_PCT = 70; // 已用達這個百分比（剩 30%）就在頁面最上方顯示紅色提醒
+const CREDIT_ALERT_PCT = 70;          // 已用達這個百分比（剩 30%）→ 紅色提醒
+const GEMINI_STALE_DAYS = 30;         // Gemini 實際餘額超過這麼多天沒更新 → 黃色提醒
+const DEEPINFRA_STALE_DAYS = 3;       // DeepInfra 自動抓超過這麼多天沒成功 → 黃色提醒（代表排程或金鑰出問題）
+const TOTAL_KEY = '__TOTAL__';        // ai_monthly_spend 裡「不篩選 Key 的總計」
 
-// 該供應商的儲值如果全是台幣，就用台幣顯示（依儲值時填的匯率換算）；否則顯示美金
-function fmtCredit(usd, st) {
-  if (st.currency === 'TWD' && Number(st.topup_usd) > 0) {
-    const rate = Number(st.topup_amount) / Number(st.topup_usd);
-    return 'NT$' + Math.round(usd * rate).toLocaleString('en-US');
+let providerInfo = { gemini: { currency: 'TWD' }, deepinfra: { currency: 'USD' } }; // 會被 ai_latest_balance() 的結果蓋掉
+let latestBalances = [];
+let dailyRows = [];
+let monthlySpendRows = [];   // 目前日期區間涵蓋的月份的 ai_monthly_spend
+let currentFullMonths = null; // 目前區間如果剛好是「整個月」，這裡是 ['2026-09-01', ...]；否則 null
+
+function curOf(provider) { return (providerInfo[provider] && providerInfo[provider].currency) || 'USD'; }
+function fmtCur(n, currency) {
+  if (n == null || isNaN(Number(n))) return '—';
+  n = Number(n);
+  if (currency === 'TWD') return (n < 0 ? '-' : '') + 'NT$' + Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: 2 });
+  return (n < 0 ? '-' : '') + 'US$' + Math.abs(n).toFixed(Math.abs(n) > 0 && Math.abs(n) < 1 ? 4 : 2);
+}
+// Key 名稱去掉前綴再比對：GEMINI_API_KEY_SECRETARY、AI_API_KEY_SECRETARY 都當成 SECRETARY
+function keySuffix(name) {
+  return String(name || '').trim().toUpperCase().replace(/^(GEMINI_API_KEY_|DEEPINFRA_API_KEY_|AI_API_KEY_)/, '') || '(未記錄)';
+}
+function localDateStr(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+
+// 依目前選的區間，算出每日表要的起訖日期，以及「是不是剛好整個月」
+function rangeDates(startISO, endISO) {
+  const today = new Date();
+  const s = startISO ? new Date(startISO) : null;
+  const e = endISO ? new Date(endISO) : null; // e 是「不含」的結束時間
+  const firstTopup = latestBalances.map(b => b.first_topup_date).filter(Boolean).sort()[0] || '2026-08-01';
+  const startDate = s ? localDateStr(s) : firstTopup;
+  const endDate = e ? localDateStr(new Date(e.getTime() - 1)) : localDateStr(today);
+  let months = null;
+  if (s && e && s.getDate() === 1 && s.getHours() === 0 && s.getMinutes() === 0 && e.getDate() === 1 && e.getHours() === 0 && e.getMinutes() === 0) {
+    months = [];
+    for (let d = new Date(s); d < e; d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) months.push(localDateStr(d));
   }
-  return 'US$' + Number(usd).toFixed(2);
+  return { startDate, endDate, months };
 }
 
-async function loadCreditStatus() {
-  const [statusRes, topupRes, checkRes] = await Promise.all([
-    sb.rpc('ai_credit_status'),
-    sb.from('ai_credit_topups').select('*').order('topup_date', { ascending: false }),
-    sb.from('ai_billing_checks').select('*').order('checked_on', { ascending: false }),
+async function loadSpendTables(startISO, endISO) {
+  const { startDate, endDate, months } = rangeDates(startISO, endISO);
+  currentFullMonths = months;
+  const monthFrom = startDate.slice(0, 8) + '01';
+  const [dailyRes, spendRes] = await Promise.all([
+    sb.rpc('ai_daily_balance', { p_start: startDate, p_end: endDate }),
+    sb.from('ai_monthly_spend').select('*').gte('month', monthFrom).lte('month', endDate),
   ]);
-  const errBox = document.getElementById('credit-error');
-  const errs = [statusRes, topupRes, checkRes].filter(r => r.error).map(r => r.error.message);
-  if (errs.length) {
-    console.error('讀取儲值資料失敗:', errs);
-    errBox.textContent = '讀取儲值資料失敗：' + errs[0] + '（如果是剛更新網站，可能是資料庫還沒建立儲值相關的表與函式）';
-    errBox.style.display = 'block';
+  if (dailyRes.error) console.error('讀取每日餘額失敗:', dailyRes.error);
+  if (spendRes.error) console.error('讀取每月花費失敗:', spendRes.error);
+  dailyRows = dailyRes.error ? [] : (dailyRes.data || []);
+  monthlySpendRows = spendRes.error ? [] : (spendRes.data || []);
+  renderSysSpendTable(!!(dailyRes.error || spendRes.error));
+  renderDailyTable(dailyRes.error);
+}
+
+// 把共用同一把 Key 的系統併成一組（例：出貨實績系統、已接未出訂單共用 SHIPPING）
+function buildSystemGroups() {
+  const parent = {};
+  const find = x => (parent[x] === x ? x : (parent[x] = find(parent[x])));
+  const add = x => { if (!(x in parent)) parent[x] = x; };
+  const union = (a, b) => { add(a); add(b); parent[find(a)] = find(b); };
+  const sp = (usageSummary && usageSummary.by_system_provider) || [];
+  const keys = (usageSummary && usageSummary.by_key) || [];
+  sp.forEach(r => add(r.system_name));
+  keys.forEach(k => { const ss = k.systems || []; ss.forEach(add); for (let i = 1; i < ss.length; i++) union(ss[0], ss[i]); });
+  const groups = {};
+  Object.keys(parent).forEach(sn => { const root = find(sn); (groups[root] = groups[root] || { systems: [], di: 0, gem: 0, gemKeys: new Set(), diKeys: new Set() }).systems.push(sn); });
+  const groupOf = sn => groups[find(sn)];
+  sp.forEach(r => { const g = groupOf(r.system_name); if (r.provider === 'deepinfra') g.di += Number(r.tokens) || 0; if (r.provider === 'gemini') g.gem += Number(r.tokens) || 0; });
+  keys.forEach(k => { const g = groupOf((k.systems || [])[0]); if (!g) return; if (k.provider === 'gemini') g.gemKeys.add(keySuffix(k.key_name)); if (k.provider === 'deepinfra') g.diKeys.add(keySuffix(k.key_name)); });
+  return Object.values(groups);
+}
+
+function renderSysSpendTable(loadFailed) {
+  const groups = buildSystemGroups().filter(g => g.di > 0 || g.gem > 0).sort((a, b) => (b.di + b.gem) - (a.di + a.gem));
+  const months = currentFullMonths;
+  const notes = [];
+  const spendOf = (provider, month, key) => {
+    const r = monthlySpendRows.find(x => x.provider === provider && String(x.month).slice(0, 10) === month && x.key_name === key);
+    return r ? Number(r.amount) : null;
+  };
+
+  // ---- Gemini：整月才有依 Key 的實際花費 ----
+  let gemTotal = null, gemAssigned = 0, gemMissing = false;
+  if (months) {
+    const totals = months.map(m => spendOf('gemini', m, TOTAL_KEY));
+    gemTotal = totals.every(v => v != null) ? totals.reduce((s, v) => s + v, 0) : null;
+    groups.forEach(g => {
+      g.gemSpend = g.gemKeys.size ? 0 : null;
+      if (g.gemSpend == null) return;
+      for (const k of g.gemKeys) for (const m of months) {
+        const v = spendOf('gemini', m, k);
+        if (v == null) { g.gemSpend = null; gemMissing = true; break; }
+        g.gemSpend += v;
+      }
+      if (g.gemSpend != null) gemAssigned += g.gemSpend;
+    });
+    if (gemTotal == null) {
+      // 沒抄總計的話，用「所有已抄的 Key 加起來」當總計
+      const all = monthlySpendRows.filter(x => x.provider === 'gemini' && months.includes(String(x.month).slice(0, 10)) && x.key_name !== TOTAL_KEY);
+      if (all.length) { gemTotal = all.reduce((s, x) => s + Number(x.amount), 0); notes.push('Gemini 帳單總計：該月沒有抄「總計」，暫用已抄的各 Key 加總。'); }
+    }
+    if (gemMissing) notes.push('Gemini：有 Key 的當月花費還沒抄，該系統顯示「未抄」。請到下方「每月依 Key 實際花費」補上。');
   } else {
-    errBox.style.display = 'none';
+    groups.forEach(g => { g.gemSpend = null; });
   }
-  renderCreditStatus(statusRes.error ? [] : (statusRes.data || []));
+
+  // ---- DeepInfra：整月用自動抓的月總計；其他區間用每日餘額差加總 ----
+  let diTotal = null, diPartial = false;
+  if (months) {
+    const totals = months.map(m => spendOf('deepinfra', m, TOTAL_KEY));
+    diTotal = totals.every(v => v != null) ? totals.reduce((s, v) => s + v, 0) : null;
+  }
+  if (diTotal == null) {
+    const di = dailyRows.filter(r => r.provider === 'deepinfra');
+    const known = di.filter(r => r.spend != null);
+    if (known.length) { diTotal = known.reduce((s, r) => s + Number(r.spend), 0); diPartial = known.length < di.length; }
+  }
+  const diGroups = groups.filter(g => g.di > 0);
+  groups.forEach(g => { g.diSpend = null; });
+  if (diTotal != null && diGroups.length === 1) {
+    diGroups[0].diSpend = diTotal;
+    notes.push(`DeepInfra：這段期間只有「${diGroups[0].systems.map(sn => SYSTEM_LABELS[sn] || sn).join('、')}」在用，DeepInfra 帳單金額全部算給它。`);
+  } else if (diGroups.length > 1) {
+    notes.push('DeepInfra：這段期間有多個系統在用，DeepInfra 只提供帳戶總額、分不出是哪個系統，所以各系統顯示「—」，只列總計。');
+  }
+  if (diPartial) notes.push('DeepInfra：有些日子沒有自動抓到餘額，總計只算有紀錄的日子，可能偏低。');
+  if (!months) notes.push('目前選的不是「整個月」，Gemini 依系統的實際花費只有每月的數字，所以顯示「—」。要看 Gemini 實際花費請選「指定月份」。');
+  if (loadFailed) notes.push('⚠️ 讀取實際花費資料失敗，如果是剛更新網站，可能是資料庫還沒建立（sql/2026-10-16b_實際花費與每日餘額.sql）。');
+
+  const cell = (v, provider, missingText) => v == null ? `<span style="color:var(--muted);">${missingText || '—'}</span>` : fmtCur(v, curOf(provider));
+  fillTable('sys-spend-table', groups.map(g => `
+    <tr>
+      <td>${g.systems.map(sn => escapeHtml(SYSTEM_LABELS[sn] || sn)).join('<br>')}${g.systems.length > 1 ? '<br><span style="font-size:11px;color:var(--muted);">（共用同一把 Key，花費分不開）</span>' : ''}</td>
+      <td class="num">${g.di ? fmtInt(g.di) : '—'}</td>
+      <td class="num">${g.di ? cell(g.diSpend, 'deepinfra') : '—'}</td>
+      <td class="num">${g.gem ? fmtInt(g.gem) : '—'}</td>
+      <td class="num">${g.gem || g.gemKeys.size ? cell(g.gemSpend, 'gemini', months ? '未抄' : '—') : '—'}</td>
+    </tr>`));
+
+  const diTok = groups.reduce((s, g) => s + g.di, 0), gemTok = groups.reduce((s, g) => s + g.gem, 0);
+  const diAssigned = groups.reduce((s, g) => s + (g.diSpend || 0), 0);
+  const foot = [`
+    <tr style="font-weight:700;border-top:2px solid var(--border);">
+      <td>供應商帳單總計</td>
+      <td class="num">${fmtInt(diTok)}</td><td class="num">${cell(diTotal, 'deepinfra')}</td>
+      <td class="num">${fmtInt(gemTok)}</td><td class="num">${cell(gemTotal, 'gemini')}</td>
+    </tr>`];
+  const diOther = diTotal != null && diGroups.length <= 1 ? diTotal - diAssigned : null;
+  const gemOther = gemTotal != null && !gemMissing ? gemTotal - gemAssigned : null;
+  if ((diOther && Math.abs(diOther) > 0.00001) || (gemOther && Math.abs(gemOther) > 0.00001)) {
+    foot.push(`
+    <tr style="color:var(--muted);">
+      <td>不屬於本儀表板的用量<br><span style="font-size:11px;">（例：同事的 Guard system，或沒回報用量的呼叫）</span></td>
+      <td class="num">—</td><td class="num">${diOther ? fmtCur(diOther, curOf('deepinfra')) : '—'}</td>
+      <td class="num">—</td><td class="num">${gemOther ? fmtCur(gemOther, curOf('gemini')) : '—'}</td>
+    </tr>`);
+  }
+  document.querySelector('#sys-spend-table tfoot').innerHTML = groups.length ? foot.join('') : '';
+  document.getElementById('sys-spend-note').innerHTML = notes.map(n => '• ' + escapeHtml(n)).join('<br>');
+}
+
+function renderDailyTable(err) {
+  const byDay = {};
+  dailyRows.forEach(r => { (byDay[r.day] = byDay[r.day] || {})[r.provider] = r; });
+  const days = Object.keys(byDay).sort().reverse(); // 最新的日期在最上面
+  const c = (r, field) => {
+    if (!r) return '—';
+    if (field === 'topup') return Number(r.topup) ? `<span style="color:var(--green);">+${fmtCur(r.topup, r.currency)}</span>` : '';
+    const v = r[field];
+    if (v == null) return '<span style="color:var(--muted);">—</span>';
+    if (field === 'balance') return `${fmtCur(v, r.currency)}${r.balance_source === 'manual' ? '<br><span style="font-size:11px;color:var(--muted);">手動填</span>' : ''}`;
+    return fmtCur(v, r.currency);
+  };
+  fillTable('daily-table', err ? [] : days.map(d => {
+    const di = byDay[d].deepinfra, ge = byDay[d].gemini;
+    return `<tr><td>${escapeHtml(d)}</td>
+      <td class="num">${c(di, 'topup')}</td><td class="num">${c(di, 'spend')}</td><td class="num">${c(di, 'balance')}</td>
+      <td class="num">${c(ge, 'topup')}</td><td class="num">${c(ge, 'spend')}</td><td class="num">${c(ge, 'balance')}</td></tr>`;
+  }));
+  const sumSpend = p => { const rows = dailyRows.filter(r => r.provider === p && r.spend != null); return rows.length ? rows.reduce((s, r) => s + Number(r.spend), 0) : null; };
+  const di = sumSpend('deepinfra'), ge = sumSpend('gemini');
+  document.getElementById('daily-summary').innerHTML = err
+    ? '<span style="color:var(--red);">讀取每日餘額失敗（如果是剛更新網站，可能是資料庫還沒建立）</span>'
+    : `區間內有紀錄的日子，實際花費合計：DeepInfra <b>${fmtCur(di, curOf('deepinfra'))}</b>　Gemini <b>${fmtCur(ge, curOf('gemini'))}</b>`;
+}
+
+// ---------- 最新餘額、提醒、儲值與餘額紀錄 ----------
+async function loadCreditStatus() {
+  const [latestRes, topupRes, snapRes] = await Promise.all([
+    sb.rpc('ai_latest_balance'),
+    sb.from('ai_credit_topups').select('*').order('topup_date', { ascending: false }),
+    sb.from('ai_balance_snapshots').select('*').order('taken_at', { ascending: false }).limit(60),
+  ]);
+  [latestRes, topupRes, snapRes].filter(r => r.error).forEach(r => console.error('讀取儲值/餘額失敗:', r.error));
+  latestBalances = latestRes.error ? [] : (latestRes.data || []);
+  latestBalances.forEach(b => { providerInfo[b.provider] = { currency: b.currency, label: b.label }; });
+  syncCurrencyLabels();
+  renderLatestTable(latestRes.error);
+  renderBalanceAlerts();
   renderTopupTable(topupRes.error ? [] : (topupRes.data || []));
-  renderCheckTable(checkRes.error ? [] : (checkRes.data || []));
+  renderSnapTable(snapRes.error ? [] : (snapRes.data || []));
 }
 
-function renderCreditStatus(list) {
-  const tbody = document.querySelector('#credit-table tbody');
-  document.getElementById('credit-empty-note').style.display = list.length ? 'none' : 'block';
-  tbody.innerHTML = list.map(st => {
-    const pct = st.used_pct == null ? null : Number(st.used_pct);
+function syncCurrencyLabels() {
+  const name = c => (c === 'TWD' ? '台幣 NT$' : '美金 US$');
+  document.getElementById('cur-gemini').textContent = name(curOf('gemini'));
+  document.getElementById('cur-deepinfra').textContent = name(curOf('deepinfra'));
+  document.getElementById('topup-currency-label').textContent = name(curOf(document.getElementById('topup-provider').value));
+  document.getElementById('snap-currency-label').textContent = name(curOf(document.getElementById('snap-provider').value));
+  document.getElementById('keyspend-currency').textContent = name(curOf('gemini'));
+}
+
+function renderLatestTable(err) {
+  const tbody = document.querySelector('#latest-table tbody');
+  if (err) { tbody.innerHTML = '<tr><td colspan="5" style="color:var(--red);font-size:13px;">讀取失敗（如果是剛更新網站，可能是資料庫還沒建立 sql/2026-10-16b_實際花費與每日餘額.sql）</td></tr>'; return; }
+  tbody.innerHTML = latestBalances.map(b => {
+    const pct = b.used_pct == null ? null : Number(b.used_pct);
     const warn = pct != null && pct >= CREDIT_ALERT_PCT;
-    const how = st.checked_on
-      ? `以 ${st.checked_on} 對帳的實際餘額為準，扣掉之後的估算花費`
-      : `從 ${st.first_topup_date} 第一筆儲值起，扣掉系統估算花費`;
-    return `
-      <tr>
-        <td>${escapeHtml(providerLabel(st.provider))}</td>
-        <td class="num">${fmtCredit(Number(st.topup_usd), st)}</td>
-        <td class="num">${fmtCredit(Number(st.used_usd), st)}</td>
-        <td class="num" style="${warn ? 'color:var(--red);font-weight:700;' : ''}">${fmtCredit(Number(st.remaining_usd), st)}</td>
-        <td>${pct == null ? '—' : `<span style="${warn ? 'color:var(--red);font-weight:700;' : ''}">${pct}%</span><div class="pct-bar${warn ? ' warn' : ''}"><span style="width:${Math.min(100, Math.max(0, pct))}%"></span></div>`}</td>
-        <td style="font-size:12px;color:var(--muted);">${escapeHtml(how)}</td>
-      </tr>`;
+    return `<tr>
+      <td>${escapeHtml(b.label || providerLabel(b.provider))}</td>
+      <td class="num">${fmtCur(b.total_topup, b.currency)}</td>
+      <td class="num" style="${warn ? 'color:var(--red);font-weight:700;' : ''}">${b.remaining == null ? '<span style="color:var(--muted);">還沒有實際餘額</span>' : fmtCur(b.remaining, b.currency)}</td>
+      <td>${pct == null ? '—' : `<span style="${warn ? 'color:var(--red);font-weight:700;' : ''}">${pct}%</span><div class="pct-bar${warn ? ' warn' : ''}"><span style="width:${Math.min(100, Math.max(0, pct))}%"></span></div>`}</td>
+      <td style="font-size:12px;color:var(--muted);">${b.snap_at ? fmtDate(b.snap_at) + (b.snap_source === 'api' ? '（自動抓）' : '（手動填）') : '—'}</td>
+    </tr>`;
   }).join('');
-
-  // 頁面最上方紅色提醒（不論在哪個分頁都看得到）
-  const alerts = list.filter(st => st.used_pct != null && Number(st.used_pct) >= CREDIT_ALERT_PCT);
-  const alertEl = document.getElementById('credit-alert');
-  if (!alerts.length) { alertEl.style.display = 'none'; alertEl.innerHTML = ''; return; }
-  alertEl.innerHTML = alerts.map(st => {
-    const pct = Number(st.used_pct);
-    const remain = Number(st.remaining_usd);
-    return pct >= 100 || remain <= 0
-      ? `🔴 ${escapeHtml(providerLabel(st.provider))} 儲值估計已用完（已用 ${pct}%），請儘快儲值，避免 AI 功能停擺`
-      : `🔴 ${escapeHtml(providerLabel(st.provider))} 已用 ${pct}%，剩約 ${fmtCredit(remain, st)}，請儲值`;
-  }).join('<br>') + '<small>金額是系統估算的，可能跟實際帳單有落差；儲值後請到「大量雲端系統統計」分頁新增儲值紀錄，提醒就會消失。</small>';
-  alertEl.style.display = 'block';
 }
 
-function fmtAmount(amount, currency) {
-  return (currency === 'TWD' ? 'NT$' : 'US$') + Number(amount).toLocaleString('en-US');
+function renderBalanceAlerts() {
+  const red = [], yellow = [];
+  latestBalances.forEach(b => {
+    const name = escapeHtml(b.label || providerLabel(b.provider));
+    if (!(Number(b.total_topup) > 0)) return; // 沒有儲值紀錄的供應商不提醒
+    if (b.used_pct != null && Number(b.used_pct) >= CREDIT_ALERT_PCT) {
+      const asOf = b.snap_at ? `（截至 ${fmtDate(b.snap_at)} 實際餘額）` : '';
+      red.push(Number(b.remaining) <= 0
+        ? `🔴 ${name} 儲值已用完（已用 ${b.used_pct}%）${asOf}，請儘快儲值，避免 AI 功能停擺`
+        : `🔴 ${name} 已用 ${b.used_pct}%，剩約 ${fmtCur(b.remaining, b.currency)}${asOf}，請儲值`);
+    }
+    const stale = b.provider === 'deepinfra' ? DEEPINFRA_STALE_DAYS : GEMINI_STALE_DAYS;
+    if (b.snap_at == null || Number(b.days_since_snap) > stale) {
+      yellow.push(b.provider === 'deepinfra'
+        ? `🟡 ${name} 的實際餘額${b.snap_at ? `已經 ${Math.floor(b.days_since_snap)} 天沒有自動更新` : '還沒有自動抓到過'}，請通知負責維護的人檢查（可在「大量雲端系統統計」分頁按「立即抓 DeepInfra 餘額」試試）`
+        : `🟡 ${name} 的實際餘額${b.snap_at ? `已經 ${Math.floor(b.days_since_snap)} 天沒更新` : '還沒有填過'}，請到 AI Studio 帳單頁看餘額，填到「大量雲端系統統計」分頁的「② 手動填實際餘額」`);
+    }
+  });
+  const redEl = document.getElementById('credit-alert'), yEl = document.getElementById('credit-alert-yellow');
+  redEl.innerHTML = red.join('<br>') + (red.length ? '<small>儲值後請到「大量雲端系統統計」分頁新增儲值紀錄，提醒就會更新。</small>' : '');
+  redEl.style.display = red.length ? 'block' : 'none';
+  yEl.innerHTML = yellow.join('<br>');
+  yEl.style.display = yellow.length ? 'block' : 'none';
 }
 
 let topupRowsCache = [];
@@ -1071,68 +1333,49 @@ function renderTopupTable(rows) {
     <tr>
       <td>${escapeHtml(providerLabel(r.provider))}</td>
       <td>${escapeHtml(r.topup_date)}</td>
-      <td class="num">${fmtAmount(r.amount, r.currency)}${r.currency === 'TWD' && r.twd_per_usd ? `<br><span style="font-size:11px;color:var(--muted);">匯率 ${escapeHtml(r.twd_per_usd)}</span>` : ''}</td>
-      <td class="num">US$${Number(r.amount_usd).toFixed(2)}</td>
+      <td class="num">${fmtCur(r.amount, r.currency)}${r.currency !== curOf(r.provider) ? '<br><span style="font-size:11px;color:var(--red);">幣別跟供應商不同，不列入計算</span>' : ''}</td>
       <td>${escapeHtml(r.note || '')}</td>
       <td style="font-size:12px;color:var(--muted);">${escapeHtml(r.created_by || '')}</td>
-      <td style="white-space:nowrap;"><button class="link-btn" onclick="editTopup(${Number(r.id)})">修改</button><button class="link-btn del" onclick="deleteCreditRow('ai_credit_topups', ${Number(r.id)})">刪除</button></td>
-    </tr>`).join('') : '<tr><td colspan="7" style="color:var(--muted);font-size:13px;">還沒有儲值紀錄</td></tr>';
+      <td style="white-space:nowrap;"><button class="link-btn" onclick="editTopup(${Number(r.id)})">修改</button><button class="link-btn del" onclick="deleteBalanceRow('ai_credit_topups', ${Number(r.id)})">刪除</button></td>
+    </tr>`).join('') : '<tr><td colspan="6" style="color:var(--muted);font-size:13px;">還沒有儲值紀錄</td></tr>';
 }
 
-function renderCheckTable(rows) {
-  document.querySelector('#check-table tbody').innerHTML = rows.length ? rows.map(r => `
+function renderSnapTable(rows) {
+  document.querySelector('#snap-table tbody').innerHTML = rows.length ? rows.map(r => `
     <tr>
       <td>${escapeHtml(providerLabel(r.provider))}</td>
-      <td>${escapeHtml(r.checked_on)}</td>
-      <td class="num">${fmtAmount(r.balance_amount, r.currency)}</td>
-      <td class="num">US$${Number(r.balance_usd).toFixed(2)}</td>
-      <td>${escapeHtml(r.note || '')}</td>
-      <td style="font-size:12px;color:var(--muted);">${escapeHtml(r.created_by || '')}</td>
-      <td><button class="link-btn del" onclick="deleteCreditRow('ai_billing_checks', ${Number(r.id)})">刪除</button></td>
-    </tr>`).join('') : '<tr><td colspan="7" style="color:var(--muted);font-size:13px;">還沒有對帳紀錄（沒有的話，餘額就用「儲值 − 系統估算」）</td></tr>';
+      <td>${fmtDate(r.taken_at)}</td>
+      <td class="num">${fmtCur(r.balance, curOf(r.provider))}</td>
+      <td>${r.source === 'api' ? '自動抓' : '手動填'}</td>
+      <td style="font-size:12px;">${escapeHtml(r.note || '')}${r.created_by ? `<br><span style="color:var(--muted);">${escapeHtml(r.created_by)}</span>` : ''}</td>
+      <td><button class="link-btn del" onclick="deleteBalanceRow('ai_balance_snapshots', ${Number(r.id)})">刪除</button></td>
+    </tr>`).join('') : '<tr><td colspan="6" style="color:var(--muted);font-size:13px;">還沒有實際餘額紀錄</td></tr>';
 }
 
-function toggleRateInput(prefix) {
-  const isTwd = document.getElementById(prefix + '-currency').value === 'TWD';
-  document.getElementById(prefix + '-rate-wrap').style.display = isTwd ? '' : 'none';
-}
-
-// 讀表單的金額＋幣別＋匯率，換算成美金；有錯回傳 { err: 訊息 }
-function readMoney(prefix) {
-  const raw = document.getElementById(prefix + '-amount').value;
-  const amount = Number(raw);
-  const currency = document.getElementById(prefix + '-currency').value;
-  const rate = Number(document.getElementById(prefix + '-rate').value);
-  if (raw === '' || !(amount >= 0)) return { err: '請輸入金額' };
-  if (currency === 'TWD' && !(rate > 0)) return { err: '台幣請填匯率（1 美金 = 幾台幣）' };
-  return { amount, currency, rate: currency === 'TWD' ? rate : null, usd: currency === 'TWD' ? amount / rate : amount };
-}
-
-function showCreditError(msg) {
-  const errBox = document.getElementById('credit-error');
-  errBox.textContent = msg;
-  errBox.style.display = 'block';
+function showFormError(id, msg) {
+  const el = document.getElementById(id);
+  el.textContent = msg; el.style.display = msg ? 'block' : 'none';
 }
 
 async function saveTopup() {
   const id = document.getElementById('topup-id').value;
+  const provider = document.getElementById('topup-provider').value;
   const date = document.getElementById('topup-date').value;
-  const m = readMoney('topup');
-  if (!date) return showCreditError('請選擇儲值日期（不確定的話填大概的日期，並在備註寫「日期不確定」）');
-  if (m.err) return showCreditError(m.err);
-  if (!(m.amount > 0)) return showCreditError('儲值金額要大於 0');
+  const rawAmt = document.getElementById('topup-amount').value;
+  const amount = Number(rawAmt);
+  if (!date) return showFormError('topup-error', '儲值：請選擇儲值日期');
+  if (rawAmt === '' || !(amount > 0)) return showFormError('topup-error', '儲值：請輸入儲值金額（要大於 0）');
+  const currency = curOf(provider);
   const row = {
-    provider: document.getElementById('topup-provider').value,
-    topup_date: date, amount: m.amount, currency: m.currency, twd_per_usd: m.rate, amount_usd: m.usd,
-    note: document.getElementById('topup-note').value.trim() || null,
-    updated_at: new Date().toISOString(),
+    provider, topup_date: date, amount, currency, twd_per_usd: null, amount_usd: currency === 'USD' ? amount : null,
+    note: document.getElementById('topup-note').value.trim() || null, updated_at: new Date().toISOString(),
   };
   const { error } = id
     ? await sb.from('ai_credit_topups').update(row).eq('id', Number(id))
     : await sb.from('ai_credit_topups').insert({ ...row, created_by: document.getElementById('user-email-label').textContent });
-  if (error) return showCreditError('儲存失敗：' + error.message);
+  if (error) return showFormError('topup-error', '儲值：儲存失敗 ' + error.message);
   resetTopupForm();
-  loadCreditStatus();
+  refreshBalances();
 }
 
 function editTopup(id) {
@@ -1142,10 +1385,8 @@ function editTopup(id) {
   document.getElementById('topup-provider').value = r.provider;
   document.getElementById('topup-date').value = r.topup_date;
   document.getElementById('topup-amount').value = r.amount;
-  document.getElementById('topup-currency').value = r.currency;
-  if (r.twd_per_usd) document.getElementById('topup-rate').value = r.twd_per_usd;
   document.getElementById('topup-note').value = r.note || '';
-  toggleRateInput('topup');
+  syncCurrencyLabels();
   document.getElementById('topup-save-btn').textContent = '儲存修改';
   document.getElementById('topup-cancel-btn').style.display = '';
   document.getElementById('topup-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1155,31 +1396,126 @@ function resetTopupForm() {
   ['topup-id', 'topup-date', 'topup-amount', 'topup-note'].forEach(k => { document.getElementById(k).value = ''; });
   document.getElementById('topup-save-btn').textContent = '新增儲值';
   document.getElementById('topup-cancel-btn').style.display = 'none';
-  document.getElementById('credit-error').style.display = 'none';
+  showFormError('topup-error', '');
 }
 
-async function saveBillingCheck() {
-  const date = document.getElementById('check-date').value;
-  const m = readMoney('check');
-  if (!date) return showCreditError('請選擇對帳日期');
-  if (m.err) return showCreditError(m.err);
-  const { error } = await sb.from('ai_billing_checks').insert({
-    provider: document.getElementById('check-provider').value,
-    checked_on: date, balance_amount: m.amount, currency: m.currency, twd_per_usd: m.rate, balance_usd: m.usd,
-    note: document.getElementById('check-note').value.trim() || null,
+async function saveSnapshot() {
+  const provider = document.getElementById('snap-provider').value;
+  const date = document.getElementById('snap-date').value;
+  const rawAmt = document.getElementById('snap-amount').value;
+  const amount = Number(rawAmt);
+  if (!date) return showFormError('snap-error', '實際餘額：請選擇日期（今天看到的就選今天）');
+  if (rawAmt === '' || !(amount >= 0)) return showFormError('snap-error', '實際餘額：請輸入帳單上的剩餘餘額');
+  // 選今天＝記成「現在」；選以前的日子＝記成那天晚上 23:59:59
+  const takenAt = date === localDateStr(new Date()) ? new Date() : new Date(date + 'T23:59:59');
+  if (takenAt > new Date()) return showFormError('snap-error', '實際餘額：日期不能選未來');
+  const { error } = await sb.from('ai_balance_snapshots').insert({
+    provider, taken_at: takenAt.toISOString(), balance: amount, source: 'manual',
+    note: document.getElementById('snap-note').value.trim() || null,
     created_by: document.getElementById('user-email-label').textContent,
   });
-  if (error) return showCreditError('儲存失敗：' + error.message);
-  ['check-date', 'check-amount', 'check-note'].forEach(k => { document.getElementById(k).value = ''; });
-  document.getElementById('credit-error').style.display = 'none';
-  loadCreditStatus();
+  if (error) return showFormError('snap-error', '實際餘額：儲存失敗 ' + error.message);
+  ['snap-date', 'snap-amount', 'snap-note'].forEach(k => { document.getElementById(k).value = ''; });
+  showFormError('snap-error', '');
+  refreshBalances();
 }
 
-async function deleteCreditRow(table, id) {
+async function deleteBalanceRow(table, id) {
   if (!confirm('確定要刪除這一筆嗎？')) return;
   const { error } = await sb.from(table).delete().eq('id', id);
-  if (error) return showCreditError('刪除失敗：' + error.message);
+  if (error) { alert('刪除失敗：' + error.message); return; }
+  refreshBalances();
+}
+
+// 儲值或餘額有變動：重新讀最新餘額、提醒，以及目前區間的兩張表
+function refreshBalances() {
   loadCreditStatus();
+  if (aiSystemsTabLoaded) loadData();
+}
+
+// 管理員手動觸發伺服器端去 DeepInfra 抓餘額（dry＝只測試連線，不記錄）
+async function fetchDeepinfraNow(dry) {
+  const msg = document.getElementById('deepinfra-msg');
+  msg.style.color = 'var(--muted)'; msg.textContent = '連線中...';
+  const { data } = await sb.auth.getSession();
+  const token = data && data.session && data.session.access_token;
+  if (!token) { msg.style.color = 'var(--red)'; msg.textContent = '請重新登入'; return; }
+  try {
+    const r = await fetch('/api/deepinfra-snapshot' + (dry ? '?dry=1' : ''), { headers: { Authorization: 'Bearer ' + token } });
+    const j = await r.json().catch(() => ({}));
+    console.log('DeepInfra 回應:', j);
+    if (!r.ok && r.status !== 207) { msg.style.color = 'var(--red)'; msg.textContent = '失敗：' + (j.error || ('狀態碼 ' + r.status)); return; }
+    if (j.balance_usd == null) { msg.style.color = 'var(--red)'; msg.textContent = `DeepInfra 沒有回傳餘額（狀態碼 ${j.me_status}）${j.me_error ? '：' + j.me_error : ''}`; return; }
+    msg.style.color = (j.errors && j.errors.length) ? 'var(--amber)' : 'var(--green)';
+    msg.textContent = `${dry ? '測試成功（沒有記錄）' : '已記錄'}：餘額 ${fmtCur(j.balance_usd, 'USD')}（原始數字 ${j.raw_stripe_balance}）` + ((j.errors && j.errors.length) ? '；' + j.errors.join('；') : '');
+    if (!dry) refreshBalances();
+  } catch (e) {
+    msg.style.color = 'var(--red)'; msg.textContent = '連線失敗：' + e.message;
+  }
+}
+
+// ---------- 每月依 Key 實際花費（Gemini 手動抄） ----------
+let keySpendKnownKeys = null; // 所有曾經回報過用量的 Gemini Key（含哪些系統），只查一次
+async function loadKeySpendGrid() {
+  const monthVal = document.getElementById('keyspend-month').value;
+  if (!monthVal) return;
+  const month = monthVal + '-01';
+  if (!keySpendKnownKeys) {
+    const { data, error } = await sb.rpc('ai_usage_summary', { p_start: null, p_end: null });
+    keySpendKnownKeys = {};
+    if (!error && data) (data.by_key || []).filter(k => k.provider === 'gemini').forEach(k => {
+      const sfx = keySuffix(k.key_name);
+      keySpendKnownKeys[sfx] = new Set([...(keySpendKnownKeys[sfx] || []), ...(k.systems || [])]);
+    });
+  }
+  const { data: rows, error } = await sb.from('ai_monthly_spend').select('*').eq('provider', 'gemini').eq('month', month);
+  const msg = document.getElementById('keyspend-msg');
+  if (error) { msg.style.color = 'var(--red)'; msg.textContent = '讀取失敗：' + error.message; return; }
+  msg.textContent = '';
+  const saved = {}; (rows || []).forEach(r => { saved[r.key_name] = r; });
+  const keys = [TOTAL_KEY, ...Object.keys(keySpendKnownKeys).sort(), ...Object.keys(saved).filter(k => k !== TOTAL_KEY && !keySpendKnownKeys[k]).sort()];
+  document.querySelector('#keyspend-table tbody').innerHTML = keys.map(k => `
+    <tr>
+      <td>${k === TOTAL_KEY ? '<b>總計（不篩選 Key）</b>' : escapeHtml(k)}</td>
+      <td style="font-size:12px;color:var(--muted);">${k === TOTAL_KEY ? 'AI Studio「Your Total Cost」不選任何 Key' : (keySpendKnownKeys[k] ? [...keySpendKnownKeys[k]].map(sn => escapeHtml(SYSTEM_LABELS[sn] || sn)).join('、') : '（不在本儀表板，例如同事的系統）')}</td>
+      <td class="num"><input type="number" class="keyspend-input" data-key="${escapeHtml(k)}" min="0" step="any" value="${saved[k] ? escapeHtml(saved[k].amount) : ''}" style="width:120px;padding:5px 7px;border:1px solid var(--border);border-radius:6px;text-align:right;" /></td>
+    </tr>`).join('');
+}
+
+async function saveKeySpendGrid() {
+  const monthVal = document.getElementById('keyspend-month').value;
+  const msg = document.getElementById('keyspend-msg');
+  if (!monthVal) { msg.style.color = 'var(--red)'; msg.textContent = '請先選月份'; return; }
+  const month = monthVal + '-01';
+  const me = document.getElementById('user-email-label').textContent;
+  const upserts = [], deletes = [];
+  for (const input of document.querySelectorAll('.keyspend-input')) {
+    const key = input.dataset.key, raw = input.value.trim();
+    if (raw === '') { deletes.push(key); continue; }
+    const v = Number(raw);
+    if (!(v >= 0)) { msg.style.color = 'var(--red)'; msg.textContent = `「${key === TOTAL_KEY ? '總計' : key}」金額不正確`; return; }
+    upserts.push({ provider: 'gemini', month, key_name: key, amount: v, source: 'manual', created_by: me, updated_at: new Date().toISOString() });
+  }
+  const extraName = document.getElementById('keyspend-extra-name').value.trim();
+  const extraRaw = document.getElementById('keyspend-extra-amount').value.trim();
+  if (extraName || extraRaw) {
+    if (!extraName || extraRaw === '' || !(Number(extraRaw) >= 0)) { msg.style.color = 'var(--red)'; msg.textContent = '「其他 Key」要同時填名稱和金額'; return; }
+    upserts.push({ provider: 'gemini', month, key_name: keySuffix(extraName), amount: Number(extraRaw), source: 'manual', created_by: me, updated_at: new Date().toISOString() });
+  }
+  msg.style.color = 'var(--muted)'; msg.textContent = '儲存中...';
+  if (upserts.length) {
+    const { error } = await sb.from('ai_monthly_spend').upsert(upserts, { onConflict: 'provider,month,key_name' });
+    if (error) { msg.style.color = 'var(--red)'; msg.textContent = '儲存失敗：' + error.message; return; }
+  }
+  if (deletes.length) {
+    const { error } = await sb.from('ai_monthly_spend').delete().eq('provider', 'gemini').eq('month', month).in('key_name', deletes);
+    if (error) { msg.style.color = 'var(--red)'; msg.textContent = '清除空白欄位失敗：' + error.message; return; }
+  }
+  document.getElementById('keyspend-extra-name').value = '';
+  document.getElementById('keyspend-extra-amount').value = '';
+  msg.style.color = 'var(--green)'; msg.textContent = '已儲存 ' + monthVal;
+  loadKeySpendGrid();
+  if (aiSystemsTabLoaded) loadData();
 }
 
 document.getElementById('range-tabs').addEventListener('click', (e) => {
@@ -1214,7 +1550,11 @@ document.getElementById('main-tabs').addEventListener('click', (e) => {
     loadManualMonth();
   }
   if (btn.dataset.tab === 'deck') { loadDeckData(); }
-  if (btn.dataset.tab === 'ai-systems') loadCreditStatus();
+  if (btn.dataset.tab === 'ai-systems') {
+    loadCreditStatus();
+    const ks = document.getElementById('keyspend-month');
+    if (!ks.value) { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1); ks.value = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); loadKeySpendGrid(); }
+  }
   if (btn.dataset.tab === 'ai-systems' && !aiSystemsTabLoaded) {
     aiSystemsTabLoaded = true;
     loadData();
