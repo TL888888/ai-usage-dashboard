@@ -961,16 +961,19 @@ function renderSummary() {
   `;
 }
 
+// 系統顯示名稱一律＝tl-home.com 首頁卡片名稱（＝人資權限名稱＝系統頁面標題，Michelle 2026-10-17 規則；任何一處改名這裡也要跟著改）
+// 左邊是各系統回報用量時的 system_name。interview（董事長訪談）沒有首頁卡片，維持原名。
+// market 是光電、PCB 兩張卡片共用同一支程式回報（system_name 都是 market），分不開，所以合併顯示。
 const SYSTEM_LABELS = {
   astech: '服務部技術論壇',
-  bom: 'BOM管理系統',
+  bom: 'BOM 智能迭代系統',
   wechat: '營業商務訊息',
   interview: '董事長訪談',
-  qc: '品保系統',
+  qc: '品保管理系統',
   secretary: '行動秘書',
-  shipping: '出貨實績系統',
-  orders: '已接未出訂單',
-  market: '產業訊息',
+  shipping: '出貨管理系統',
+  orders: '三廠接單出貨認列管理',
+  market: '光電產業訊息／PCB產業訊息',
 };
 
 const PROVIDER_LABELS = { gemini: 'Gemini（Google）', deepinfra: 'DeepInfra', unknown: '（未記錄供應商）' };
