@@ -27,7 +27,7 @@
 import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://bvuygyajzupeqpqfwmgi.supabase.co';
-const STRIPE_BALANCE_DIVISOR = Number(process.env.DEEPINFRA_BALANCE_DIVISOR || 1); // 實測後確認：1＝美金、100＝美分
+const STRIPE_BALANCE_DIVISOR = Number(process.env.DEEPINFRA_BALANCE_DIVISOR || 1); // 2026-10-17 實測確認單位是美金（stripe_balance=-19.93 ⇔ 儲值 US$20 減 9、10 月共 8 美分），所以預設 1
 
 function monthKey(d) { return d.getUTCFullYear() + '.' + String(d.getUTCMonth() + 1).padStart(2, '0'); }
 
@@ -103,7 +103,7 @@ export default async function handler(req, res) {
       const month = String(m.period).replace('.', '-') + '-01';
       const { error } = await sb.from('ai_monthly_spend').upsert({
         provider: 'deepinfra', month, key_name: '__TOTAL__', amount: m.total_cost_cents / 100, source: 'api',
-        note: 'DeepInfra API /payment/usage（' + (m.invoice_id === 'NOT_FINAL' ? '本月尚未結算' : '已結算') + '）',
+        note: 'DeepInfra API /payment/usage（' + (/^in_/.test(String(m.invoice_id)) ? '已結算' : '尚未結算') + '）',
         created_by: 'Vercel 排程', updated_at: now.toISOString(),
       }, { onConflict: 'provider,month,key_name' });
       if (error) errors.push(`寫入 ${m.period} 月花費失敗：` + error.message);
