@@ -1130,7 +1130,7 @@ async function loadSpendTables(startISO, endISO) {
   renderDailyTable(dailyRes.error);
 }
 
-// 把共用同一把 Key 的系統併成一組（例：出貨實績系統、已接未出訂單共用 SHIPPING）
+// 把共用同一把 Key 的系統併成一組（例：出貨管理系統、三廠接單出貨認列管理共用 SHIPPING）
 function buildSystemGroups() {
   const parent = {};
   const find = x => (parent[x] === x ? x : (parent[x] = find(parent[x])));
