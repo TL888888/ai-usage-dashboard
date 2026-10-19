@@ -1,5 +1,5 @@
 {
   "crons": [
-    { "path": "/api/deepinfra-snapshot", "schedule": "50 15 * * *" }
+    { "path": "/api/deepinfra-snapshot", "schedule": "0 15 * * *" }
   ]
 }
