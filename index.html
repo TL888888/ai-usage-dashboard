@@ -409,11 +409,13 @@
       <div class="summary-row" id="summary-row"></div>
 
       <section class="panel">
-        <h2>各系統 tokens 與實際花費</h2>
+        <h2>各系統 tokens 與花費</h2>
         <p class="import-note" style="padding:0 20px;">
-          依上面選的日期區間。<b>tokens</b> 是我們各系統自己記錄的；<b>實際花費</b>一律用供應商的實際數字，不用 tokens 推算。<br>
-          Gemini 依系統的花費來自「每月依 Key 實際花費」（每月到 AI Studio 抄一次），所以<b>只有選「整個月」時才有數字</b>，其他區間顯示「—」。
+          依上面選的日期區間。<b>tokens</b> 是各系統自己記錄的。<br>
+          <b>DeepInfra 花費＝實際</b>（每天自動到 DeepInfra 抓餘額）。<b>Gemini 花費＝估算</b>：Google 沒有任何方式能自動抓 Gemini 餘額，
+          所以用「tokens × 官方單價 × 匯率 × 校正倍數」估算；每月填一次 Gemini 實際帳單（下方「每月 Gemini 實際帳單」），系統會自動算出校正倍數，估算會越來越接近帳單。
         </p>
+        <div id="factor-info" style="padding:6px 20px 0;font-size:13px;"></div>
         <div class="table-scroll">
           <table id="sys-spend-table">
             <thead>
@@ -434,11 +436,10 @@
       </section>
 
       <section class="panel">
-        <h2>每日餘額（實際）</h2>
+        <h2>每日花費與餘額</h2>
         <p class="import-note" style="padding:0 20px;">
-          餘額＝儲值 − 實際花費。DeepInfra 由網站每天晚上自動到 DeepInfra 抓一次實際餘額；
-          <b>Gemini 沒有辦法自動抓</b>（Google 規定餘額只能在 AI Studio 帳單頁看），只有您手動填過實際餘額的那幾天才有數字。
-          沒有實際紀錄的日子顯示「—」，不會用估算去補。當天花費＝前一天餘額＋當天儲值−當天餘額。
+          <b>DeepInfra（實際）</b>：網站每天晚上自動到 DeepInfra 抓一次實際餘額，當天花費＝前一天餘額＋當天儲值−當天餘額；沒抓到的日子顯示「—」。<br>
+          <b>Gemini（估算）</b>：從儲值金額（或最近一次手動填的實際餘額）往下扣每天的估算花費；有填實際餘額的那天標示「實際」。
         </p>
         <div id="daily-summary" style="padding:6px 20px 0;font-size:13px;"></div>
         <div class="table-scroll" style="max-height:460px;overflow-y:auto;">
@@ -461,35 +462,30 @@
       </section>
 
       <section class="panel">
-        <h2>每月依 Key 實際花費（Gemini，手動抄 AI Studio）</h2>
+        <h2>每月 Gemini 實際帳單（校正用）</h2>
         <details style="padding:0 20px;font-size:13px;line-height:1.8;">
-          <summary style="cursor:pointer;color:var(--blue);">📖 怎麼抄？（點這裡看步驟）</summary>
+          <summary style="cursor:pointer;color:var(--blue);">📖 帳單金額去哪裡看？（點這裡看步驟）</summary>
           <ol style="margin:6px 0 0;padding-left:20px;">
             <li>用瀏覽器打開 <a href="https://aistudio.google.com/" target="_blank" rel="noopener">aistudio.google.com</a>，用公司的 Google 帳號登入。</li>
-            <li>點左邊選單的「Dashboard」→「Usage」（或「Spend」），會看到「Gemini API Spend」頁面。</li>
-            <li>上方日期區間選<b>上個月 1 日到最後一天</b>。</li>
-            <li>先<b>不要</b>選任何 Key，畫面上的「Your Total Cost」就是<b>總計</b>，抄到下面「總計（不篩選 Key）」那一格。</li>
-            <li>再點「API Keys」篩選，<b>一次只勾一把</b>（例如 GEMINI_API_KEY_SECRETARY），把「Your Total Cost」抄到下面同名的那一格。每把 Key 都做一次。</li>
-            <li>清單裡有、但下面沒有的 Key（例如同事的「Guard system」），在最下面「其他 Key 名稱」填名字和金額。</li>
-            <li>全部填完按「儲存這個月」。金額照 AI Studio 顯示的數字抄（目前設定是<b>台幣</b>）。</li>
+            <li>點左邊選單的「Dashboard」→「Usage」（或「Spend」），進到「Gemini API Spend」頁面。</li>
+            <li>上方日期區間選<b>上個月 1 日到最後一天</b>，<b>不要</b>選任何 Key。</li>
+            <li>把畫面上的「Your Total Cost」金額，填到下面的「帳單金額」，月份選上個月，按「儲存」。</li>
           </ol>
+          <p style="margin:6px 0 0;color:var(--muted);">只要填總額一格就好，不用每把 Key 分開抄。這個總額也包含同事 Guard system 那把 Key 的花費。</p>
         </details>
-        <div class="credit-form">
+        <div class="credit-form admin-only">
           <label>月份：</label>
-          <input type="month" id="keyspend-month" onchange="loadKeySpendGrid()" />
+          <input type="month" id="keyspend-month" />
+          <input type="number" id="bill-amount" placeholder="帳單金額" min="0" step="any" />
           <span style="color:var(--muted);">幣別：<b id="keyspend-currency">—</b></span>
+          <button class="btn-mini" onclick="saveGeminiBill()">儲存</button>
+          <span id="keyspend-msg" style="font-size:12.5px;"></span>
         </div>
         <div class="table-scroll">
           <table id="keyspend-table">
-            <thead><tr><th>Key</th><th>這把 Key 的系統（依我們的紀錄）</th><th class="num">當月實際花費</th></tr></thead>
+            <thead><tr><th>月份</th><th class="num">估算（官方單價）</th><th class="num">實際帳單</th><th class="num">校正倍數</th><th>說明</th><th></th></tr></thead>
             <tbody></tbody>
           </table>
-        </div>
-        <div class="credit-form admin-only">
-          <input type="text" id="keyspend-extra-name" placeholder="其他 Key 名稱（例：Guard system）" style="min-width:200px;" />
-          <input type="number" id="keyspend-extra-amount" placeholder="金額" min="0" step="any" />
-          <button class="btn-mini" onclick="saveKeySpendGrid()">儲存這個月</button>
-          <span id="keyspend-msg" style="font-size:12.5px;"></span>
         </div>
       </section>
 
@@ -929,7 +925,9 @@ const SYSTEM_LABELS = {
   shipping: '出貨管理系統',
   orders: '三廠接單出貨認列管理',
   market: '光電產業訊息／PCB產業訊息',
+  guard: 'Guard system（掛號包裹登記／管理部）', // 同事的系統，透過 api/usage-report.js 回報
 };
+const GUARD_SYSTEM = 'guard';
 
 const PROVIDER_LABELS = { gemini: 'Gemini（Google）', deepinfra: 'DeepInfra', unknown: '（未記錄供應商）' };
 function providerLabel(p) { return PROVIDER_LABELS[p] || p; }
@@ -1039,6 +1037,9 @@ let latestBalances = [];
 let dailyRows = [];
 let monthlySpendRows = [];   // 目前日期區間涵蓋的月份的 ai_monthly_spend
 let currentFullMonths = null; // 目前區間如果剛好是「整個月」，這裡是 ['2026-09-01', ...]；否則 null
+let geminiDailyRows = [];     // ai_gemini_daily()：Gemini 每日估算花費與估算餘額
+let geminiBySystem = {};      // ai_gemini_by_system()：system_name → 估算花費
+let geminiFactors = [];       // ai_gemini_month_factors()：每月估算、實際帳單、校正倍數
 
 function curOf(provider) { return (providerInfo[provider] && providerInfo[provider].currency) || 'USD'; }
 function fmtCur(n, currency) {
@@ -1073,16 +1074,36 @@ async function loadSpendTables(startISO, endISO) {
   const { startDate, endDate, months } = rangeDates(startISO, endISO);
   currentFullMonths = months;
   const monthFrom = startDate.slice(0, 8) + '01';
-  const [dailyRes, spendRes] = await Promise.all([
+  const [dailyRes, spendRes, gemDailyRes, gemSysRes, factorRes] = await Promise.all([
     sb.rpc('ai_daily_balance', { p_start: startDate, p_end: endDate }),
     sb.from('ai_monthly_spend').select('*').gte('month', monthFrom).lte('month', endDate),
+    sb.rpc('ai_gemini_daily', { p_start: startDate, p_end: endDate }),
+    sb.rpc('ai_gemini_by_system', { p_start: startISO, p_end: endISO }),
+    sb.rpc('ai_gemini_month_factors'),
   ]);
-  if (dailyRes.error) console.error('讀取每日餘額失敗:', dailyRes.error);
-  if (spendRes.error) console.error('讀取每月花費失敗:', spendRes.error);
+  [dailyRes, spendRes, gemDailyRes, gemSysRes, factorRes].filter(r => r.error).forEach(r => console.error('讀取花費資料失敗:', r.error));
   dailyRows = dailyRes.error ? [] : (dailyRes.data || []);
   monthlySpendRows = spendRes.error ? [] : (spendRes.data || []);
-  renderSysSpendTable(!!(dailyRes.error || spendRes.error));
-  renderDailyTable(dailyRes.error);
+  geminiDailyRows = gemDailyRes.error ? [] : (gemDailyRes.data || []);
+  geminiBySystem = {};
+  (gemSysRes.error ? [] : (gemSysRes.data || [])).forEach(r => { geminiBySystem[r.system_name] = Number(r.est_spend) || 0; });
+  geminiFactors = factorRes.error ? [] : (factorRes.data || []);
+  renderFactorInfo();
+  renderSysSpendTable(!!(dailyRes.error || spendRes.error || gemDailyRes.error || gemSysRes.error));
+  renderDailyTable(dailyRes.error || gemDailyRes.error);
+}
+
+// 目前套用的校正倍數（最近一個月份那列的 applied_factor）
+function currentFactor() {
+  const last = geminiFactors[geminiFactors.length - 1];
+  return last ? { factor: Number(last.applied_factor), from: last.factor_from } : { factor: 1, from: null };
+}
+function monthLabelOf(d) { return d ? String(d).slice(0, 4) + '年' + Number(String(d).slice(5, 7)) + '月' : ''; }
+function renderFactorInfo() {
+  const { factor, from } = currentFactor();
+  document.getElementById('factor-info').innerHTML = from
+    ? `Gemini 目前校正倍數：<b>×${factor.toFixed(2)}</b>（依 ${monthLabelOf(from)}實際帳單 ÷ 估算）`
+    : '<span style="color:var(--amber);">Gemini 還沒有填過實際帳單，目前校正倍數 ×1（純照官方單價，可能偏低）。請在下方「每月 Gemini 實際帳單」填上個月的帳單。</span>';
 }
 
 // 把共用同一把 Key 的系統併成一組（例：出貨管理系統、三廠接單出貨認列管理共用 SHIPPING）
@@ -1112,41 +1133,20 @@ function renderSysSpendTable(loadFailed) {
     return r ? Number(r.amount) : null;
   };
 
-  // ---- Gemini：整月才有依 Key 的實際花費 ----
-  let gemTotal = null, gemAssigned = 0, gemMissing = false;
-  if (months) {
-    const totals = months.map(m => spendOf('gemini', m, TOTAL_KEY));
-    gemTotal = totals.every(v => v != null) ? totals.reduce((s, v) => s + v, 0) : null;
-    groups.forEach(g => {
-      g.gemSpend = g.gemKeys.size ? 0 : null;
-      if (g.gemSpend == null) return;
-      for (const k of g.gemKeys) for (const m of months) {
-        const v = spendOf('gemini', m, k);
-        if (v == null) { g.gemSpend = null; gemMissing = true; break; }
-        g.gemSpend += v;
-      }
-      if (g.gemSpend != null) gemAssigned += g.gemSpend;
-    });
-    if (gemTotal == null) {
-      // 沒抄總計的話，用「所有已抄的 Key 加起來」當總計
-      const all = monthlySpendRows.filter(x => x.provider === 'gemini' && months.includes(String(x.month).slice(0, 10)) && x.key_name !== TOTAL_KEY);
-      if (all.length) { gemTotal = all.reduce((s, x) => s + Number(x.amount), 0); notes.push('Gemini 帳單總計：該月沒有抄「總計」，暫用已抄的各 Key 加總。'); }
-    }
-    if (gemMissing) notes.push('Gemini：有 Key 的當月花費還沒抄，該系統顯示「未抄」。請到下方「每月依 Key 實際花費」補上。');
-  } else {
-    groups.forEach(g => { g.gemSpend = null; });
-  }
+  // ---- Gemini：估算（tokens × 官方單價 × 匯率 × 校正倍數，由資料庫函式 ai_gemini_by_system 算） ----
+  groups.forEach(g => { g.gemSpend = g.gem > 0 ? g.systems.reduce((sum, sn) => sum + (geminiBySystem[sn] || 0), 0) : null; });
+  const gemTotal = Object.values(geminiBySystem).reduce((sum, v) => sum + v, 0);
 
-  // ---- DeepInfra：整月用自動抓的月總計；其他區間用每日餘額差加總 ----
+  // ---- DeepInfra：實際。整月用自動抓的月總計；其他區間用每日餘額差加總 ----
   let diTotal = null, diPartial = false;
   if (months) {
     const totals = months.map(m => spendOf('deepinfra', m, TOTAL_KEY));
-    diTotal = totals.every(v => v != null) ? totals.reduce((s, v) => s + v, 0) : null;
+    diTotal = totals.every(v => v != null) ? totals.reduce((sum, v) => sum + v, 0) : null;
   }
   if (diTotal == null) {
     const di = dailyRows.filter(r => r.provider === 'deepinfra');
     const known = di.filter(r => r.spend != null);
-    if (known.length) { diTotal = known.reduce((s, r) => s + Number(r.spend), 0); diPartial = known.length < di.length; }
+    if (known.length) { diTotal = known.reduce((sum, r) => sum + Number(r.spend), 0); diPartial = known.length < di.length; }
   }
   const diGroups = groups.filter(g => g.di > 0);
   groups.forEach(g => { g.diSpend = null; });
@@ -1157,81 +1157,102 @@ function renderSysSpendTable(loadFailed) {
     notes.push('DeepInfra：這段期間有多個系統在用，DeepInfra 只提供帳戶總額、分不出是哪個系統，所以各系統顯示「—」，只列總計。');
   }
   if (diPartial) notes.push('DeepInfra：有些日子沒有自動抓到餘額，總計只算有紀錄的日子，可能偏低。');
-  if (!months) notes.push('目前選的不是「整個月」，Gemini 依系統的實際花費只有每月的數字，所以顯示「—」。要看 Gemini 實際花費請選「指定月份」。');
-  if (loadFailed) notes.push('⚠️ 讀取實際花費資料失敗，如果是剛更新網站，可能是資料庫還沒建立（sql/2026-10-16b_實際花費與每日餘額.sql）。');
+  if (loadFailed) notes.push('⚠️ 讀取花費資料失敗，如果是剛更新網站，可能是資料庫還沒建立（sql/2026-10-19b_Gemini估算與校正倍數.sql）。');
 
-  const cell = (v, provider, missingText) => v == null ? `<span style="color:var(--muted);">${missingText || '—'}</span>` : fmtCur(v, curOf(provider));
-  fillTable('sys-spend-table', groups.map(g => `
+  const cell = (v, provider) => v == null ? '<span style="color:var(--muted);">—</span>' : fmtCur(v, curOf(provider));
+  const est = v => v == null ? '<span style="color:var(--muted);">—</span>' : fmtCur(v, curOf('gemini')) + '<span style="font-size:11px;color:var(--muted);">（估算）</span>';
+  const rows = groups.map(g => `
     <tr>
-      <td>${g.systems.map(sn => escapeHtml(SYSTEM_LABELS[sn] || sn)).join('<br>')}${g.systems.length > 1 ? '<br><span style="font-size:11px;color:var(--muted);">（共用同一把 Key，花費分不開）</span>' : ''}</td>
+      <td>${g.systems.map(sn => escapeHtml(SYSTEM_LABELS[sn] || sn)).join('<br>')}${g.systems.length > 1 ? '<br><span style="font-size:11px;color:var(--muted);">（共用同一把 Key）</span>' : ''}</td>
       <td class="num">${g.di ? fmtInt(g.di) : '—'}</td>
       <td class="num">${g.di ? cell(g.diSpend, 'deepinfra') : '—'}</td>
       <td class="num">${g.gem ? fmtInt(g.gem) : '—'}</td>
-      <td class="num">${g.gem || g.gemKeys.size ? cell(g.gemSpend, 'gemini', months ? '未抄' : '—') : '—'}</td>
-    </tr>`));
-
-  const diTok = groups.reduce((s, g) => s + g.di, 0), gemTok = groups.reduce((s, g) => s + g.gem, 0);
-  const diAssigned = groups.reduce((s, g) => s + (g.diSpend || 0), 0);
-  const foot = [`
-    <tr style="font-weight:700;border-top:2px solid var(--border);">
-      <td>供應商帳單總計</td>
-      <td class="num">${fmtInt(diTok)}</td><td class="num">${cell(diTotal, 'deepinfra')}</td>
-      <td class="num">${fmtInt(gemTok)}</td><td class="num">${cell(gemTotal, 'gemini')}</td>
-    </tr>`];
-  const diOther = diTotal != null && diGroups.length <= 1 ? diTotal - diAssigned : null;
-  const gemOther = gemTotal != null && !gemMissing ? gemTotal - gemAssigned : null;
-  if ((diOther && Math.abs(diOther) > 0.00001) || (gemOther && Math.abs(gemOther) > 0.00001)) {
-    foot.push(`
+      <td class="num">${g.gem ? est(g.gemSpend) : '—'}</td>
+    </tr>`);
+  // Guard system（同事的系統）固定一列：還沒收到回報前顯示「等待回報」，不提供手動填寫（Michelle：一個系統不要有兩種做法）
+  if (!groups.some(g => g.systems.includes(GUARD_SYSTEM))) {
+    rows.push(`
     <tr style="color:var(--muted);">
-      <td>不屬於本儀表板的用量<br><span style="font-size:11px;">（例：同事的 Guard system，或沒回報用量的呼叫）</span></td>
-      <td class="num">—</td><td class="num">${diOther ? fmtCur(diOther, curOf('deepinfra')) : '—'}</td>
-      <td class="num">—</td><td class="num">${gemOther ? fmtCur(gemOther, curOf('gemini')) : '—'}</td>
+      <td>${escapeHtml(SYSTEM_LABELS[GUARD_SYSTEM])}</td>
+      <td class="num">—</td><td class="num">—</td>
+      <td class="num" colspan="2" style="text-align:right;">等待回報（同事加上回報程式後會自動出現）</td>
     </tr>`);
   }
-  document.querySelector('#sys-spend-table tfoot').innerHTML = groups.length ? foot.join('') : '';
+  fillTable('sys-spend-table', rows);
+
+  const diTok = groups.reduce((sum, g) => sum + g.di, 0), gemTok = groups.reduce((sum, g) => sum + g.gem, 0);
+  const diAssigned = groups.reduce((sum, g) => sum + (g.diSpend || 0), 0);
+  const foot = [`
+    <tr style="font-weight:700;border-top:2px solid var(--border);">
+      <td>合計<br><span style="font-size:11px;font-weight:400;color:var(--muted);">DeepInfra 實際／Gemini 估算</span></td>
+      <td class="num">${fmtInt(diTok)}</td><td class="num">${cell(diTotal, 'deepinfra')}</td>
+      <td class="num">${fmtInt(gemTok)}</td><td class="num">${est(gemTotal)}</td>
+    </tr>`];
+  const diOther = diTotal != null && diGroups.length <= 1 ? diTotal - diAssigned : null;
+  if (diOther && Math.abs(diOther) > 0.00001) {
+    foot.push(`
+    <tr style="color:var(--muted);">
+      <td>DeepInfra 帳單裡沒有對應到系統的部分<br><span style="font-size:11px;">（例：沒回報用量的呼叫）</span></td>
+      <td class="num">—</td><td class="num">${fmtCur(diOther, curOf('deepinfra'))}</td><td class="num">—</td><td class="num">—</td>
+    </tr>`);
+  }
+  document.querySelector('#sys-spend-table tfoot').innerHTML = foot.join('');
   document.getElementById('sys-spend-note').innerHTML = notes.map(n => '• ' + escapeHtml(n)).join('<br>');
 }
 
 function renderDailyTable(err) {
   const byDay = {};
-  dailyRows.forEach(r => { (byDay[r.day] = byDay[r.day] || {})[r.provider] = r; });
+  dailyRows.filter(r => r.provider === 'deepinfra').forEach(r => { (byDay[r.day] = byDay[r.day] || {}).di = r; });
+  geminiDailyRows.forEach(r => { (byDay[r.day] = byDay[r.day] || {}).ge = r; });
   const days = Object.keys(byDay).sort().reverse(); // 最新的日期在最上面
-  const c = (r, field) => {
-    if (!r) return '—';
-    if (field === 'topup') return Number(r.topup) ? `<span style="color:var(--green);">+${fmtCur(r.topup, r.currency)}</span>` : '';
-    const v = r[field];
-    if (v == null) return '<span style="color:var(--muted);">—</span>';
-    if (field === 'balance') return `${fmtCur(v, r.currency)}${r.balance_source === 'manual' ? '<br><span style="font-size:11px;color:var(--muted);">手動填</span>' : ''}`;
-    return fmtCur(v, r.currency);
-  };
+  const muted = t => `<span style="color:var(--muted);">${t}</span>`;
+  const topup = (r, provider) => r && Number(r.topup) ? `<span style="color:var(--green);">+${fmtCur(r.topup, curOf(provider))}</span>` : '';
   fillTable('daily-table', err ? [] : days.map(d => {
-    const di = byDay[d].deepinfra, ge = byDay[d].gemini;
+    const di = byDay[d].di, ge = byDay[d].ge;
     return `<tr><td>${escapeHtml(d)}</td>
-      <td class="num">${c(di, 'topup')}</td><td class="num">${c(di, 'spend')}</td><td class="num">${c(di, 'balance')}</td>
-      <td class="num">${c(ge, 'topup')}</td><td class="num">${c(ge, 'spend')}</td><td class="num">${c(ge, 'balance')}</td></tr>`;
+      <td class="num">${topup(di, 'deepinfra')}</td>
+      <td class="num">${di && di.spend != null ? fmtCur(di.spend, curOf('deepinfra')) : muted('—')}</td>
+      <td class="num">${di && di.balance != null ? fmtCur(di.balance, curOf('deepinfra')) : muted('—')}</td>
+      <td class="num">${topup(ge, 'gemini')}</td>
+      <td class="num">${ge ? fmtCur(ge.est_spend, curOf('gemini')) : muted('—')}</td>
+      <td class="num">${ge && ge.balance != null ? fmtCur(ge.balance, curOf('gemini')) + '<br>' + muted(`<span style="font-size:11px;">${ge.balance_is_actual ? '實際（手動填）' : '估算'}</span>`) : muted('—')}</td></tr>`;
   }));
-  const sumSpend = p => { const rows = dailyRows.filter(r => r.provider === p && r.spend != null); return rows.length ? rows.reduce((s, r) => s + Number(r.spend), 0) : null; };
-  const di = sumSpend('deepinfra'), ge = sumSpend('gemini');
+  const diSum = (() => { const rows = dailyRows.filter(r => r.provider === 'deepinfra' && r.spend != null); return rows.length ? rows.reduce((sum, r) => sum + Number(r.spend), 0) : null; })();
+  const geSum = geminiDailyRows.length ? geminiDailyRows.reduce((sum, r) => sum + Number(r.est_spend || 0), 0) : null;
   document.getElementById('daily-summary').innerHTML = err
-    ? '<span style="color:var(--red);">讀取每日餘額失敗（如果是剛更新網站，可能是資料庫還沒建立）</span>'
-    : `區間內有紀錄的日子，實際花費合計：DeepInfra <b>${fmtCur(di, curOf('deepinfra'))}</b>　Gemini <b>${fmtCur(ge, curOf('gemini'))}</b>`;
+    ? '<span style="color:var(--red);">讀取每日資料失敗（如果是剛更新網站，可能是資料庫還沒建立）</span>'
+    : `區間內花費合計：DeepInfra <b>${fmtCur(diSum, curOf('deepinfra'))}</b>（實際，只算有紀錄的日子）　Gemini <b>${fmtCur(geSum, curOf('gemini'))}</b>（估算）`;
 }
 
 // ---------- 最新餘額、提醒、儲值與餘額紀錄 ----------
 async function loadCreditStatus() {
-  const [latestRes, topupRes, snapRes] = await Promise.all([
+  const today = localDateStr(new Date());
+  const [latestRes, topupRes, snapRes, gemTodayRes, factorRes] = await Promise.all([
     sb.rpc('ai_latest_balance'),
     sb.from('ai_credit_topups').select('*').order('topup_date', { ascending: false }),
     sb.from('ai_balance_snapshots').select('*').order('taken_at', { ascending: false }).limit(60),
+    sb.rpc('ai_gemini_daily', { p_start: today, p_end: today }),
+    sb.rpc('ai_gemini_month_factors'),
   ]);
-  [latestRes, topupRes, snapRes].filter(r => r.error).forEach(r => console.error('讀取儲值/餘額失敗:', r.error));
+  [latestRes, topupRes, snapRes, gemTodayRes, factorRes].filter(r => r.error).forEach(r => console.error('讀取儲值/餘額失敗:', r.error));
   latestBalances = latestRes.error ? [] : (latestRes.data || []);
-  latestBalances.forEach(b => { providerInfo[b.provider] = { currency: b.currency, label: b.label }; });
+  geminiFactors = factorRes.error ? geminiFactors : (factorRes.data || []);
+  // Gemini 沒有辦法自動抓實際餘額 → 最新餘額改用「估算餘額」（今天那一列），已用比例也照估算算
+  const gemToday = !gemTodayRes.error && gemTodayRes.data && gemTodayRes.data[0];
+  latestBalances.forEach(b => {
+    providerInfo[b.provider] = { currency: b.currency, label: b.label };
+    if (b.provider === 'gemini' && gemToday && gemToday.balance != null) {
+      b.estimated = true;
+      b.remaining = Number(gemToday.balance);
+      b.used_pct = Number(b.total_topup) > 0 ? Math.round((Number(b.total_topup) - b.remaining) / Number(b.total_topup) * 1000) / 10 : null;
+    }
+  });
   syncCurrencyLabels();
   renderLatestTable(latestRes.error);
   renderBalanceAlerts();
   renderTopupTable(topupRes.error ? [] : (topupRes.data || []));
   renderSnapTable(snapRes.error ? [] : (snapRes.data || []));
+  renderBillTable();
 }
 
 function syncCurrencyLabels() {
@@ -1245,16 +1266,19 @@ function syncCurrencyLabels() {
 
 function renderLatestTable(err) {
   const tbody = document.querySelector('#latest-table tbody');
-  if (err) { tbody.innerHTML = '<tr><td colspan="5" style="color:var(--red);font-size:13px;">讀取失敗（如果是剛更新網站，可能是資料庫還沒建立 sql/2026-10-16b_實際花費與每日餘額.sql）</td></tr>'; return; }
+  if (err) { tbody.innerHTML = '<tr><td colspan="5" style="color:var(--red);font-size:13px;">讀取失敗（如果是剛更新網站，可能是資料庫還沒建立）</td></tr>'; return; }
   tbody.innerHTML = latestBalances.map(b => {
     const pct = b.used_pct == null ? null : Number(b.used_pct);
     const warn = pct != null && pct >= CREDIT_ALERT_PCT;
+    const asOf = b.estimated
+      ? '今天（估算）'
+      : (b.snap_at ? fmtDate(b.snap_at) + (b.snap_source === 'api' ? '（自動抓）' : '（手動填）') : '—');
     return `<tr>
       <td>${escapeHtml(b.label || providerLabel(b.provider))}</td>
       <td class="num">${fmtCur(b.total_topup, b.currency)}</td>
-      <td class="num" style="${warn ? 'color:var(--red);font-weight:700;' : ''}">${b.remaining == null ? '<span style="color:var(--muted);">還沒有實際餘額</span>' : fmtCur(b.remaining, b.currency)}</td>
+      <td class="num" style="${warn ? 'color:var(--red);font-weight:700;' : ''}">${b.remaining == null ? '<span style="color:var(--muted);">還沒有資料</span>' : fmtCur(b.remaining, b.currency) + (b.estimated ? '<span style="font-size:11px;color:var(--muted);">（估算）</span>' : '')}</td>
       <td>${pct == null ? '—' : `<span style="${warn ? 'color:var(--red);font-weight:700;' : ''}">${pct}%</span><div class="pct-bar${warn ? ' warn' : ''}"><span style="width:${Math.min(100, Math.max(0, pct))}%"></span></div>`}</td>
-      <td style="font-size:12px;color:var(--muted);">${b.snap_at ? fmtDate(b.snap_at) + (b.snap_source === 'api' ? '（自動抓）' : '（手動填）') : '—'}</td>
+      <td style="font-size:12px;color:var(--muted);">${asOf}</td>
     </tr>`;
   }).join('');
 }
@@ -1265,18 +1289,22 @@ function renderBalanceAlerts() {
     const name = escapeHtml(b.label || providerLabel(b.provider));
     if (!(Number(b.total_topup) > 0)) return; // 沒有儲值紀錄的供應商不提醒
     if (b.used_pct != null && Number(b.used_pct) >= CREDIT_ALERT_PCT) {
-      const asOf = b.snap_at ? `（截至 ${fmtDate(b.snap_at)} 實際餘額）` : '';
+      const asOf = b.estimated ? '（估算）' : (b.snap_at ? `（截至 ${fmtDate(b.snap_at)} 實際餘額）` : '');
       red.push(Number(b.remaining) <= 0
         ? `🔴 ${name} 儲值已用完（已用 ${b.used_pct}%）${asOf}，請儘快儲值，避免 AI 功能停擺`
         : `🔴 ${name} 已用 ${b.used_pct}%，剩約 ${fmtCur(b.remaining, b.currency)}${asOf}，請儲值`);
     }
-    const stale = b.provider === 'deepinfra' ? DEEPINFRA_STALE_DAYS : GEMINI_STALE_DAYS;
-    if (b.snap_at == null || Number(b.days_since_snap) > stale) {
-      yellow.push(b.provider === 'deepinfra'
-        ? `🟡 ${name} 的實際餘額${b.snap_at ? `已經 ${Math.floor(b.days_since_snap)} 天沒有自動更新` : '還沒有自動抓到過'}，請通知負責維護的人檢查（可在「大量雲端系統統計」分頁按「立即抓 DeepInfra 餘額」試試）`
-        : `🟡 ${name} 的實際餘額${b.snap_at ? `已經 ${Math.floor(b.days_since_snap)} 天沒更新` : '還沒有填過'}，請到 AI Studio 帳單頁看餘額，填到「大量雲端系統統計」分頁的「② 手動填實際餘額」`);
+    if (b.provider === 'deepinfra' && (b.snap_at == null || Number(b.days_since_snap) > DEEPINFRA_STALE_DAYS)) {
+      yellow.push(`🟡 ${name} 的實際餘額${b.snap_at ? `已經 ${Math.floor(b.days_since_snap)} 天沒有自動更新` : '還沒有自動抓到過'}，請通知負責維護的人檢查（可在「大量雲端系統統計」分頁按「立即抓 DeepInfra 餘額」試試）`);
     }
   });
+  // Gemini：每月 6 日以後，上個月的實際帳單還沒填 → 黃色提醒（校正倍數要靠它）
+  const now = new Date();
+  if (now.getDate() >= 6) {
+    const prev = localDateStr(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+    const filled = geminiFactors.some(f => String(f.month).slice(0, 10) === prev && f.actual != null);
+    if (!filled) yellow.push(`🟡 ${monthLabelOf(prev)}的 Gemini 實際帳單還沒填，請到 AI Studio 看帳單總額，填到「大量雲端系統統計」分頁的「每月 Gemini 實際帳單」（估算才會準）`);
+  }
   const redEl = document.getElementById('credit-alert'), yEl = document.getElementById('credit-alert-yellow');
   redEl.innerHTML = red.join('<br>') + (red.length ? '<small>儲值後請到「大量雲端系統統計」分頁新增儲值紀錄，提醒就會更新。</small>' : '');
   redEl.style.display = red.length ? 'block' : 'none';
@@ -1413,67 +1441,52 @@ async function fetchDeepinfraNow(dry) {
 }
 
 // ---------- 每月依 Key 實際花費（Gemini 手動抄） ----------
-let keySpendKnownKeys = null; // 所有曾經回報過用量的 Gemini Key（含哪些系統），只查一次
-async function loadKeySpendGrid() {
-  const monthVal = document.getElementById('keyspend-month').value;
-  if (!monthVal) return;
-  const month = monthVal + '-01';
-  if (!keySpendKnownKeys) {
-    const { data, error } = await sb.rpc('ai_usage_summary', { p_start: null, p_end: null });
-    keySpendKnownKeys = {};
-    if (!error && data) (data.by_key || []).filter(k => k.provider === 'gemini').forEach(k => {
-      const sfx = keySuffix(k.key_name);
-      keySpendKnownKeys[sfx] = new Set([...(keySpendKnownKeys[sfx] || []), ...(k.systems || [])]);
-    });
-  }
-  const { data: rows, error } = await sb.from('ai_monthly_spend').select('*').eq('provider', 'gemini').eq('month', month);
-  const msg = document.getElementById('keyspend-msg');
-  if (error) { msg.style.color = 'var(--red)'; msg.textContent = '讀取失敗：' + error.message; return; }
-  msg.textContent = '';
-  const saved = {}; (rows || []).forEach(r => { saved[r.key_name] = r; });
-  const keys = [TOTAL_KEY, ...Object.keys(keySpendKnownKeys).sort(), ...Object.keys(saved).filter(k => k !== TOTAL_KEY && !keySpendKnownKeys[k]).sort()];
-  document.querySelector('#keyspend-table tbody').innerHTML = keys.map(k => `
-    <tr>
-      <td>${k === TOTAL_KEY ? '<b>總計（不篩選 Key）</b>' : escapeHtml(k)}</td>
-      <td style="font-size:12px;color:var(--muted);">${k === TOTAL_KEY ? 'AI Studio「Your Total Cost」不選任何 Key' : (keySpendKnownKeys[k] ? [...keySpendKnownKeys[k]].map(sn => escapeHtml(SYSTEM_LABELS[sn] || sn)).join('、') : '（不在本儀表板，例如同事的系統）')}</td>
-      <td class="num"><input type="number" class="keyspend-input" ${isReadOnly() ? 'disabled' : ''} data-key="${escapeHtml(k)}" min="0" step="any" value="${saved[k] ? escapeHtml(saved[k].amount) : ''}" style="width:120px;padding:5px 7px;border:1px solid var(--border);border-radius:6px;text-align:right;" /></td>
-    </tr>`).join('');
+// ---------- 每月 Gemini 實際帳單（校正倍數用） ----------
+function renderBillTable() {
+  const tbody = document.querySelector('#keyspend-table tbody');
+  if (!tbody) return;
+  const ks = document.getElementById('keyspend-month');
+  if (ks && !ks.value) { const d = new Date(); ks.value = localDateStr(new Date(d.getFullYear(), d.getMonth() - 1, 1)).slice(0, 7); }
+  const rows = geminiFactors.slice().reverse();
+  tbody.innerHTML = rows.length ? rows.map(f => {
+    const hasBill = f.actual != null;
+    const note = hasBill
+      ? (f.own_factor != null ? '用這個月自己的倍數' : '這個月沒有用量紀錄，無法算倍數')
+      : (f.factor_from ? `還沒填帳單，暫用 ${monthLabelOf(f.factor_from)}的倍數` : '還沒填帳單，倍數暫用 1');
+    return `<tr>
+      <td>${monthLabelOf(f.month)}</td>
+      <td class="num">${fmtCur(f.raw_estimate, curOf('gemini'))}</td>
+      <td class="num">${hasBill ? fmtCur(f.actual, curOf('gemini')) : '<span style="color:var(--muted);">未填</span>'}</td>
+      <td class="num">×${Number(f.applied_factor).toFixed(2)}</td>
+      <td style="font-size:12px;color:var(--muted);">${note}</td>
+      <td class="admin-only">${hasBill ? `<button class="link-btn del" onclick="deleteGeminiBill('${String(f.month).slice(0, 10)}')">刪除</button>` : ''}</td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="6" style="color:var(--muted);font-size:13px;">還沒有資料</td></tr>';
 }
 
-async function saveKeySpendGrid() {
+async function saveGeminiBill() {
   const monthVal = document.getElementById('keyspend-month').value;
+  const raw = document.getElementById('bill-amount').value.trim();
   const msg = document.getElementById('keyspend-msg');
   if (!monthVal) { msg.style.color = 'var(--red)'; msg.textContent = '請先選月份'; return; }
-  const month = monthVal + '-01';
-  const me = document.getElementById('user-email-label').textContent;
-  const upserts = [], deletes = [];
-  for (const input of document.querySelectorAll('.keyspend-input')) {
-    const key = input.dataset.key, raw = input.value.trim();
-    if (raw === '') { deletes.push(key); continue; }
-    const v = Number(raw);
-    if (!(v >= 0)) { msg.style.color = 'var(--red)'; msg.textContent = `「${key === TOTAL_KEY ? '總計' : key}」金額不正確`; return; }
-    upserts.push({ provider: 'gemini', month, key_name: key, amount: v, source: 'manual', created_by: me, updated_at: new Date().toISOString() });
-  }
-  const extraName = document.getElementById('keyspend-extra-name').value.trim();
-  const extraRaw = document.getElementById('keyspend-extra-amount').value.trim();
-  if (extraName || extraRaw) {
-    if (!extraName || extraRaw === '' || !(Number(extraRaw) >= 0)) { msg.style.color = 'var(--red)'; msg.textContent = '「其他 Key」要同時填名稱和金額'; return; }
-    upserts.push({ provider: 'gemini', month, key_name: keySuffix(extraName), amount: Number(extraRaw), source: 'manual', created_by: me, updated_at: new Date().toISOString() });
-  }
+  if (raw === '' || !(Number(raw) >= 0)) { msg.style.color = 'var(--red)'; msg.textContent = '請輸入帳單金額'; return; }
   msg.style.color = 'var(--muted)'; msg.textContent = '儲存中...';
-  if (upserts.length) {
-    const { error } = await sb.from('ai_monthly_spend').upsert(upserts, { onConflict: 'provider,month,key_name' });
-    if (error) { msg.style.color = 'var(--red)'; msg.textContent = '儲存失敗：' + error.message; return; }
-  }
-  if (deletes.length) {
-    const { error } = await sb.from('ai_monthly_spend').delete().eq('provider', 'gemini').eq('month', month).in('key_name', deletes);
-    if (error) { msg.style.color = 'var(--red)'; msg.textContent = '清除空白欄位失敗：' + error.message; return; }
-  }
-  document.getElementById('keyspend-extra-name').value = '';
-  document.getElementById('keyspend-extra-amount').value = '';
-  msg.style.color = 'var(--green)'; msg.textContent = '已儲存 ' + monthVal;
-  loadKeySpendGrid();
-  if (aiSystemsTabLoaded) loadData();
+  const { error } = await sb.from('ai_monthly_spend').upsert({
+    provider: 'gemini', month: monthVal + '-01', key_name: TOTAL_KEY, amount: Number(raw), source: 'manual',
+    note: 'AI Studio Gemini API Spend「Your Total Cost」', created_by: document.getElementById('user-email-label').textContent,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'provider,month,key_name' });
+  if (error) { msg.style.color = 'var(--red)'; msg.textContent = '儲存失敗：' + error.message; return; }
+  document.getElementById('bill-amount').value = '';
+  msg.style.color = 'var(--green)'; msg.textContent = '已儲存 ' + monthVal + '，校正倍數已更新';
+  refreshBalances();
+}
+
+async function deleteGeminiBill(month) {
+  if (!confirm('確定要刪除 ' + monthLabelOf(month) + '的帳單金額嗎？')) return;
+  const { error } = await sb.from('ai_monthly_spend').delete().eq('provider', 'gemini').eq('month', month).eq('key_name', TOTAL_KEY);
+  if (error) { alert('刪除失敗：' + error.message); return; }
+  refreshBalances();
 }
 
 document.getElementById('range-tabs').addEventListener('click', (e) => {
@@ -1510,8 +1523,6 @@ document.getElementById('main-tabs').addEventListener('click', (e) => {
   if (btn.dataset.tab === 'deck') { loadDeckData(); }
   if (btn.dataset.tab === 'ai-systems') {
     loadCreditStatus();
-    const ks = document.getElementById('keyspend-month');
-    if (!ks.value) { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1); ks.value = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); loadKeySpendGrid(); }
   }
   if (btn.dataset.tab === 'ai-systems' && !aiSystemsTabLoaded) {
     aiSystemsTabLoaded = true;
