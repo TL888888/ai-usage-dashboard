@@ -1470,6 +1470,8 @@ async function saveGeminiBill() {
   const msg = document.getElementById('keyspend-msg');
   if (!monthVal) { msg.style.color = 'var(--red)'; msg.textContent = '請先選月份'; return; }
   if (raw === '' || !(Number(raw) >= 0)) { msg.style.color = 'var(--red)'; msg.textContent = '請輸入帳單金額'; return; }
+  // 帳單是 0 的月份不能當校正依據（倍數會變 0，之後的估算全部歸零），這種月份不用填
+  if (Number(raw) === 0) { msg.style.color = 'var(--red)'; msg.textContent = '帳單是 0 的月份不用填（倍數會變成 0），留空就好'; return; }
   msg.style.color = 'var(--muted)'; msg.textContent = '儲存中...';
   const { error } = await sb.from('ai_monthly_spend').upsert({
     provider: 'gemini', month: monthVal + '-01', key_name: TOTAL_KEY, amount: Number(raw), source: 'manual',
