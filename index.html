@@ -4,6 +4,21 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>AI用量統計</title>
+<script>
+// 進站最前面先判斷（還沒畫任何畫面）：網址沒帶首頁憑證、這台電腦也沒有 12 小時內確認過的登入 → 直接回首頁確認，
+// 不先閃一下「確認權限中」的畫面。2026-10-19 Michelle 反映「閃了兩次才進去」：直接開網址（或首頁還是舊版快取）時，
+// 原本會先顯示一次確認畫面、跳回首頁、再帶憑證回來又顯示一次。判斷規則與下方 ssoFresh() 相同。
+(function () {
+  try {
+    if (/tl_sso=/.test(location.hash)) return;
+    var raw = localStorage.getItem('sb-bvuygyajzupeqpqfwmgi-auth-token');
+    var m = raw && JSON.parse(raw).user && JSON.parse(raw).user.app_metadata;
+    if (m && m.tl_ai_usage_role && m.tl_ai_sso_at && (Date.now() - m.tl_ai_sso_at) < 12 * 3600 * 1000) return;
+    location.replace('https://tl-home.com/?goto=ai-usage');
+    document.documentElement.style.visibility = 'hidden';
+  } catch (e) { /* 讀不到就交給下方 init() 照原本流程處理 */ }
+})();
+</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.108.2/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
@@ -339,9 +354,10 @@
   <div class="login-box">
     <h1>AI用量統計</h1>
     <!-- 2026-10-19 起帳號密碼登入已完全拿掉：一律從 tl-home.com 首頁點「AI用量統計」卡片進入，依人資系統權限免密碼登入（api/tl-sso.js） -->
-    <p class="sub" id="sso-status">正在透過公司首頁確認您的權限…</p>
+    <p class="sub" id="sso-status">載入中…</p>
     <div class="login-error" id="login-error"></div>
-    <button class="btn-primary" onclick="goTlHome()">回公司首頁</button>
+    <!-- 正常幾秒內就會進去，所以這個按鈕先藏起來；出錯或 8 秒還沒進去才出現，避免讓人以為出錯 -->
+    <button class="btn-primary" id="tl-home-btn" onclick="goTlHome()" style="display:none;">回公司首頁</button>
   </div>
 </div>
 
@@ -748,7 +764,12 @@ const TL_HOME_URL = 'https://tl-home.com/';
 const TL_SSO_MAX_AGE_MS = 12 * 3600 * 1000;
 let currentAiRole = null; // 'reader' | 'admin'
 
-function goTlHome() { window.location.href = TL_HOME_URL + '?goto=ai-usage'; }
+// 用 replace：上一頁不會回到這個中途畫面而又被導走
+function goTlHome() { window.location.replace(TL_HOME_URL + '?goto=ai-usage'); }
+// 8 秒還沒進到統計畫面，才顯示「回公司首頁」按鈕
+setTimeout(() => {
+  if (document.getElementById('app-screen').style.display !== 'block') document.getElementById('tl-home-btn').style.display = '';
+}, 8000);
 function isReadOnly() { return currentAiRole !== 'admin'; }
 function ssoFresh(user) {
   const m = (user && user.app_metadata) || {};
@@ -759,10 +780,12 @@ function showSsoError(msg) {
   const errBox = document.getElementById('login-error');
   errBox.textContent = msg;
   errBox.style.display = 'block';
+  document.getElementById('tl-home-btn').style.display = '';
 }
 
 async function loginWithTlSso(tlToken) {
   history.replaceState(null, '', window.location.pathname); // 憑證不要留在網址上
+  document.getElementById('sso-status').textContent = '正在確認您的權限…';
   try {
     const resp = await fetch('/api/tl-sso', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: tlToken }) });
     const j = await resp.json().catch(() => ({}));
