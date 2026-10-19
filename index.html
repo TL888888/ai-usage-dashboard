@@ -250,6 +250,9 @@
   .import-box .drop-zone.dragover { border-color: var(--blue); background: #eef4ff; }
   /* 儲值餘額提醒：任一供應商估計已用 ≥ 70% 時，頁面最上方的紅色橫幅 */
   .credit-alert { background: #fef2f2; border: 1px solid #fca5a5; color: #b91c1c; border-radius: 10px; padding: 12px 16px; margin-bottom: 16px; font-size: 14px; font-weight: 600; line-height: 1.7; }
+  /* 人資權限「僅讀取」：隱藏所有新增/修改/刪除/上傳（資料庫也會擋，這裡只是讓畫面乾淨） */
+  body.readonly .admin-only { display: none !important; }
+  .role-badge { font-size: 12px; padding: 3px 9px; border-radius: 999px; background: rgba(255,255,255,0.15); }
   .credit-alert.yellow { background: #fffbeb; border-color: #fcd34d; color: #92400e; }
   .credit-alert small { display: block; font-weight: 400; color: #7f1d1d; font-size: 12.5px; }
   .pct-bar { height: 8px; background: #eef2f7; border-radius: 4px; overflow: hidden; min-width: 90px; margin-top: 4px; }
@@ -335,17 +338,10 @@
 <div id="login-screen">
   <div class="login-box">
     <h1>AI用量統計</h1>
-    <p class="sub">請登入你的 TL_projects 帳號查看報表</p>
+    <!-- 2026-10-19 起帳號密碼登入已完全拿掉：一律從 tl-home.com 首頁點「AI用量統計」卡片進入，依人資系統權限免密碼登入（api/tl-sso.js） -->
+    <p class="sub" id="sso-status">正在透過公司首頁確認您的權限…</p>
     <div class="login-error" id="login-error"></div>
-    <div class="field">
-      <label>Email</label>
-      <input type="email" id="login-email" autocomplete="username" />
-    </div>
-    <div class="field">
-      <label>密碼</label>
-      <input type="password" id="login-password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin();" />
-    </div>
-    <button class="btn-primary" id="login-btn" onclick="doLogin()">登入</button>
+    <button class="btn-primary" onclick="goTlHome()">回公司首頁</button>
   </div>
 </div>
 
@@ -354,26 +350,10 @@
     <h1>📊 AI用量統計</h1>
     <div class="user-info">
       <span id="user-email-label"></span>
-      <button onclick="openAdminModal()">👤 帳號管理</button>
+      <span class="role-badge" id="role-badge" title="權限由人資系統「AI用量統計」欄設定"></span>
       <button onclick="doLogout()">登出</button>
     </div>
   </header>
-
-  <div id="admin-modal-overlay" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeAdminModal();">
-    <div class="modal-box" style="max-width:460px;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-        <h2 style="margin:0; padding:0; border:none;">帳號管理</h2>
-        <button class="ai-widget-icon-btn-dark" onclick="closeAdminModal()" title="關閉">✕</button>
-      </div>
-      <p class="import-note" style="margin-top:0;">名單裡的人才能登入查看這個儀表板的資料，其他人即使有 TL_projects 帳號也登入得進來但看不到任何數字。</p>
-      <div id="admin-list" style="margin-bottom:16px;"></div>
-      <div style="display:flex; gap:8px;">
-        <input type="email" id="new-admin-email" placeholder="新增管理員的email" style="flex:1; padding:8px 10px; border:1px solid var(--border); border-radius:7px; font-size:13px; font-family:inherit;" />
-        <button class="btn-mini" onclick="addAdmin()">新增</button>
-      </div>
-      <div id="admin-error" style="color:var(--red); font-size:12.5px; margin-top:8px; display:none;"></div>
-    </div>
-  </div>
 
   <div class="main-tabs" id="main-tabs">
     <button data-tab="manual-import" class="active">集團各公司統計</button>
@@ -489,7 +469,7 @@
             <tbody></tbody>
           </table>
         </div>
-        <div class="credit-form">
+        <div class="credit-form admin-only">
           <input type="text" id="keyspend-extra-name" placeholder="其他 Key 名稱（例：Guard system）" style="min-width:200px;" />
           <input type="number" id="keyspend-extra-amount" placeholder="金額" min="0" step="any" />
           <button class="btn-mini" onclick="saveKeySpendGrid()">儲存這個月</button>
@@ -511,7 +491,7 @@
         </div>
 
         <h3 style="margin:18px 20px 0;font-size:14px;">① 儲值紀錄（每次儲值後新增一筆）</h3>
-        <div class="credit-form" id="topup-form">
+        <div class="credit-form admin-only" id="topup-form">
           <input type="hidden" id="topup-id" />
           <select id="topup-provider" onchange="syncCurrencyLabels()"><option value="gemini">Gemini（Google）</option><option value="deepinfra">DeepInfra</option></select>
           <input type="date" id="topup-date" title="儲值日期" />
@@ -533,7 +513,7 @@
         <p class="import-note" style="padding:0 20px;margin-top:4px;">
           Gemini：打開 <a href="https://aistudio.google.com/billing" target="_blank" rel="noopener">AI Studio 帳單頁（Billing）</a>，把畫面上的「剩餘餘額」抄進來。日期選今天，系統會記成「現在」的餘額。
         </p>
-        <div class="credit-form" id="snap-form">
+        <div class="credit-form admin-only" id="snap-form">
           <select id="snap-provider" onchange="syncCurrencyLabels()"><option value="gemini">Gemini（Google）</option><option value="deepinfra">DeepInfra</option></select>
           <input type="date" id="snap-date" title="這個餘額是哪一天看到的" />
           <input type="number" id="snap-amount" placeholder="帳單上的剩餘餘額" min="0" step="any" style="width:150px;" />
@@ -542,7 +522,7 @@
           <button class="btn-mini" onclick="saveSnapshot()">記錄實際餘額</button>
         </div>
         <div id="snap-error" style="color:var(--red); font-size:12.5px; padding:0 20px; display:none;"></div>
-        <div class="credit-form">
+        <div class="credit-form admin-only">
           <button class="btn-mini" onclick="fetchDeepinfraNow(false)">立即抓 DeepInfra 餘額</button>
           <button class="link-btn" onclick="fetchDeepinfraNow(true)">測試連線（不記錄）</button>
           <span id="deepinfra-msg" style="font-size:12.5px;"></span>
@@ -634,7 +614,7 @@
 
     <div class="tab-panel active" id="tab-manual-import">
       <div style="display:flex; justify-content:flex-end; margin-bottom:14px;">
-        <button class="btn-mini" onclick="openImportModal()">📤 上傳月報表 Excel</button>
+        <button class="btn-mini admin-only" onclick="openImportModal()">📤 上傳月報表 Excel</button>
       </div>
 
       <div id="import-modal-overlay" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeImportModal();">
@@ -757,39 +737,55 @@ function escapeHtml(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-async function doLogin() {
-  const email = document.getElementById('login-email').value.trim();
-  const password = document.getElementById('login-password').value;
+// ══════════════════════════════════════════════════════════
+// 登入：依人資系統「AI用量統計」權限免密碼登入（2026-10-19，帳號密碼登入已完全拿掉）
+//   首頁點卡片 → 網址 # 後面帶首頁登入憑證(tl_sso=...) → api/tl-sso.js 確認人資權限 → 一次性登入碼 → 登入
+//   直接打開本網址、或上次確認超過 12 小時 → 導回首頁 ?goto=ai-usage，首頁確認登入後再帶憑證回來
+//   權限記在帳號的 app_metadata.tl_ai_usage_role（reader 僅讀取 / admin 管理員），只有伺服器能改
+//   資料庫同樣只認 12 小時內確認過的名單（sql/2026-10-19_人資權限登入_權限改版.sql），不靠畫面擋
+// ══════════════════════════════════════════════════════════
+const TL_HOME_URL = 'https://tl-home.com/';
+const TL_SSO_MAX_AGE_MS = 12 * 3600 * 1000;
+let currentAiRole = null; // 'reader' | 'admin'
+
+function goTlHome() { window.location.href = TL_HOME_URL + '?goto=ai-usage'; }
+function isReadOnly() { return currentAiRole !== 'admin'; }
+function ssoFresh(user) {
+  const m = (user && user.app_metadata) || {};
+  return !!(m.tl_ai_usage_role && m.tl_ai_sso_at && (Date.now() - m.tl_ai_sso_at) < TL_SSO_MAX_AGE_MS);
+}
+function showSsoError(msg) {
+  document.getElementById('sso-status').textContent = '無法進入';
   const errBox = document.getElementById('login-error');
-  const btn = document.getElementById('login-btn');
-  errBox.style.display = 'none';
-  if (!email || !password) {
-    errBox.textContent = '請輸入 email 與密碼';
-    errBox.style.display = 'block';
-    return;
+  errBox.textContent = msg;
+  errBox.style.display = 'block';
+}
+
+async function loginWithTlSso(tlToken) {
+  history.replaceState(null, '', window.location.pathname); // 憑證不要留在網址上
+  try {
+    const resp = await fetch('/api/tl-sso', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: tlToken }) });
+    const j = await resp.json().catch(() => ({}));
+    if (!resp.ok) { await sb.auth.signOut(); showSsoError(j.error || ('登入失敗（狀態碼 ' + resp.status + '）')); return; }
+    const { data, error } = await sb.auth.verifyOtp({ token_hash: j.token_hash, type: 'magiclink' });
+    if (error || !data || !data.user) { showSsoError('登入失敗：' + (error ? error.message : '沒有取得帳號')); return; }
+    enterApp(data.user);
+  } catch (e) {
+    showSsoError('登入失敗：' + e.message);
   }
-  btn.disabled = true;
-  btn.textContent = '登入中...';
-  const { data, error } = await sb.auth.signInWithPassword({ email, password });
-  btn.disabled = false;
-  btn.textContent = '登入';
-  if (error) {
-    errBox.textContent = '登入失敗：' + error.message;
-    errBox.style.display = 'block';
-    return;
-  }
-  enterApp(data.user);
 }
 
 async function doLogout() {
   await sb.auth.signOut();
-  document.getElementById('app-screen').style.display = 'none';
-  document.getElementById('login-screen').style.display = 'flex';
+  window.location.href = TL_HOME_URL;
 }
 
 let aiSystemsTabLoaded = false; // 「大量雲端系統統計」頁籤改成非預設頁籤，第一次切過去才載入資料
 
 function enterApp(user) {
+  currentAiRole = (user.app_metadata && user.app_metadata.tl_ai_usage_role) === 'admin' ? 'admin' : 'reader';
+  document.body.classList.toggle('readonly', currentAiRole !== 'admin');
+  document.getElementById('role-badge').textContent = currentAiRole === 'admin' ? '管理員' : '僅讀取';
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app-screen').style.display = 'block';
   document.getElementById('user-email-label').textContent = user.email;
@@ -798,70 +794,6 @@ function enterApp(user) {
   document.getElementById('manual-month-picker').value = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
   loadManualMonth();
   loadCreditStatus(); // 登入就檢查儲值餘額，已用 ≥ 70% 時頁面最上方顯示紅色提醒
-}
-
-// ══════════════════════════════════════════════════════════
-// 帳號管理：誰可以登入看這個儀表板
-// ══════════════════════════════════════════════════════════
-function openAdminModal() {
-  document.getElementById('admin-modal-overlay').style.display = 'flex';
-  document.getElementById('admin-error').style.display = 'none';
-  loadAdminList();
-}
-function closeAdminModal() {
-  document.getElementById('admin-modal-overlay').style.display = 'none';
-}
-
-async function loadAdminList() {
-  const listEl = document.getElementById('admin-list');
-  listEl.innerHTML = '<div style="color:var(--muted);font-size:13px;">載入中...</div>';
-  const { data, error } = await sb.from('dashboard_admins').select('*').order('added_at', { ascending: true });
-  if (error) {
-    listEl.innerHTML = `<div style="color:var(--red);font-size:13px;">讀取失敗：${escapeHtml(error.message)}（你的帳號可能不在管理員名單裡，無法管理名單）</div>`;
-    return;
-  }
-  if (!data || data.length === 0) {
-    listEl.innerHTML = '<div style="color:var(--muted);font-size:13px;">目前沒有任何管理員</div>';
-    return;
-  }
-  listEl.innerHTML = data.map(a => `
-    <div class="admin-row">
-      <span>${escapeHtml(a.email)}${a.display_name ? '　<span style="color:var(--muted);">(' + escapeHtml(a.display_name) + ')</span>' : ''}</span>
-      <button class="del-btn" onclick="removeAdmin('${escapeHtml(a.email).replace(/'/g, "\\'")}')">移除</button>
-    </div>
-  `).join('');
-}
-
-async function addAdmin() {
-  const input = document.getElementById('new-admin-email');
-  const email = input.value.trim().toLowerCase();
-  const errBox = document.getElementById('admin-error');
-  errBox.style.display = 'none';
-  if (!email || !email.includes('@')) {
-    errBox.textContent = '請輸入有效的email';
-    errBox.style.display = 'block';
-    return;
-  }
-  const { error } = await sb.from('dashboard_admins').insert({ email, added_by: document.getElementById('user-email-label').textContent });
-  if (error) {
-    errBox.textContent = '新增失敗：' + error.message;
-    errBox.style.display = 'block';
-    return;
-  }
-  input.value = '';
-  loadAdminList();
-}
-
-async function removeAdmin(email) {
-  if (email === document.getElementById('user-email-label').textContent) {
-    if (!confirm('這是你自己的帳號，移除後你自己也會失去存取權限，確定要移除嗎？')) return;
-  }
-  const { error } = await sb.from('dashboard_admins').delete().eq('email', email);
-  if (error) {
-    alert('移除失敗：' + error.message);
-    return;
-  }
-  loadAdminList();
 }
 
 function rangeStartISO(range) {
@@ -1339,7 +1271,7 @@ function renderTopupTable(rows) {
       <td class="num">${fmtCur(r.amount, r.currency)}${r.currency !== curOf(r.provider) ? '<br><span style="font-size:11px;color:var(--red);">幣別跟供應商不同，不列入計算</span>' : ''}</td>
       <td>${escapeHtml(r.note || '')}</td>
       <td style="font-size:12px;color:var(--muted);">${escapeHtml(r.created_by || '')}</td>
-      <td style="white-space:nowrap;"><button class="link-btn" onclick="editTopup(${Number(r.id)})">修改</button><button class="link-btn del" onclick="deleteBalanceRow('ai_credit_topups', ${Number(r.id)})">刪除</button></td>
+      <td style="white-space:nowrap;" class="admin-only"><button class="link-btn" onclick="editTopup(${Number(r.id)})">修改</button><button class="link-btn del" onclick="deleteBalanceRow('ai_credit_topups', ${Number(r.id)})">刪除</button></td>
     </tr>`).join('') : '<tr><td colspan="6" style="color:var(--muted);font-size:13px;">還沒有儲值紀錄</td></tr>';
 }
 
@@ -1351,7 +1283,7 @@ function renderSnapTable(rows) {
       <td class="num">${fmtCur(r.balance, curOf(r.provider))}</td>
       <td>${r.source === 'api' ? '自動抓' : '手動填'}</td>
       <td style="font-size:12px;">${escapeHtml(r.note || '')}${r.created_by ? `<br><span style="color:var(--muted);">${escapeHtml(r.created_by)}</span>` : ''}</td>
-      <td><button class="link-btn del" onclick="deleteBalanceRow('ai_balance_snapshots', ${Number(r.id)})">刪除</button></td>
+      <td class="admin-only"><button class="link-btn del" onclick="deleteBalanceRow('ai_balance_snapshots', ${Number(r.id)})">刪除</button></td>
     </tr>`).join('') : '<tr><td colspan="6" style="color:var(--muted);font-size:13px;">還沒有實際餘額紀錄</td></tr>';
 }
 
@@ -1481,7 +1413,7 @@ async function loadKeySpendGrid() {
     <tr>
       <td>${k === TOTAL_KEY ? '<b>總計（不篩選 Key）</b>' : escapeHtml(k)}</td>
       <td style="font-size:12px;color:var(--muted);">${k === TOTAL_KEY ? 'AI Studio「Your Total Cost」不選任何 Key' : (keySpendKnownKeys[k] ? [...keySpendKnownKeys[k]].map(sn => escapeHtml(SYSTEM_LABELS[sn] || sn)).join('、') : '（不在本儀表板，例如同事的系統）')}</td>
-      <td class="num"><input type="number" class="keyspend-input" data-key="${escapeHtml(k)}" min="0" step="any" value="${saved[k] ? escapeHtml(saved[k].amount) : ''}" style="width:120px;padding:5px 7px;border:1px solid var(--border);border-radius:6px;text-align:right;" /></td>
+      <td class="num"><input type="number" class="keyspend-input" ${isReadOnly() ? 'disabled' : ''} data-key="${escapeHtml(k)}" min="0" step="any" value="${saved[k] ? escapeHtml(saved[k].amount) : ''}" style="width:120px;padding:5px 7px;border:1px solid var(--border);border-radius:6px;text-align:right;" /></td>
     </tr>`).join('');
 }
 
@@ -2220,10 +2152,14 @@ function renderDrilldownView() {
 
 // 進站時檢查是否已登入
 (async function init() {
+  const ssoMatch = window.location.hash.match(/tl_sso=([^&]+)/);
+  if (ssoMatch) { await loginWithTlSso(decodeURIComponent(ssoMatch[1])); return; }
   const { data } = await sb.auth.getSession();
-  if (data && data.session && data.session.user) {
+  if (data && data.session && data.session.user && ssoFresh(data.session.user)) {
     enterApp(data.session.user);
+    return;
   }
+  goTlHome(); // 沒登入，或超過 12 小時沒跟人資確認 → 回首頁重新確認
 })();
 </script>
 

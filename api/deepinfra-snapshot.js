@@ -48,8 +48,10 @@ async function whoCalls(req, sb) {
   if (!token) return null;
   const { data, error } = await sb.auth.getUser(token);
   if (error || !data || !data.user || !data.user.email) return null;
-  const { data: admin } = await sb.from('dashboard_admins').select('email').eq('email', data.user.email.toLowerCase()).maybeSingle();
-  return admin ? { kind: 'admin', email: data.user.email } : null;
+  // 規則與資料庫 ai_dash_is_admin() 相同：名單上是管理員（admin），而且 12 小時內跟人資確認過（見 api/tl-sso.js）
+  const { data: admin } = await sb.from('dashboard_admins').select('email, role, sso_verified_at').eq('email', data.user.email.toLowerCase()).maybeSingle();
+  const fresh = admin && admin.sso_verified_at && (Date.now() - new Date(admin.sso_verified_at).getTime()) < 12 * 3600 * 1000;
+  return admin && admin.role === 'admin' && fresh ? { kind: 'admin', email: data.user.email } : null;
 }
 
 export default async function handler(req, res) {
