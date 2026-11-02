@@ -2048,11 +2048,14 @@ async function loadManualMonth() {
   } else {
     (internalResult.data || []).forEach(e => {
       const org = orgMap[String(e.asker_email || '').toLowerCase()];
+      const systemLabel = SYSTEM_LABELS[e.system_name] || e.system_name || '內部系統';
       internalMonthRows.push({
         company: normCompanyName(org ? org.company : '台灣'),
-        department: org ? org.department : '未分類（尚未建立對照）',
+        // 提問人 email 在對照表 org_directory 找得到 → 照對照表的部門；找不到（例：共用帳號 tlcs、還沒補對照的同事）
+        // → 不再顯示「未分類」，改用「系統名稱」當部門（Michelle 2026-11-02：「歸屬在各系統就好，不用管是哪個帳號用的」）
+        department: org ? org.department : systemLabel,
         token_amount: e.total_tokens || 0,
-        source_label: SYSTEM_LABELS[e.system_name] || e.system_name || '內部系統',
+        source_label: systemLabel,
       });
     });
   }
