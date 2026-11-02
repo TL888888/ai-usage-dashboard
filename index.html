@@ -2050,10 +2050,11 @@ async function loadManualMonth() {
       const org = orgMap[String(e.asker_email || '').toLowerCase()];
       const systemLabel = SYSTEM_LABELS[e.system_name] || e.system_name || '內部系統';
       internalMonthRows.push({
+        // 公司：提問人 email 在對照表 org_directory 找得到就用對照表的公司（例：南京同事的用量算南京），找不到算台灣大量
         company: normCompanyName(org ? org.company : '台灣'),
-        // 提問人 email 在對照表 org_directory 找得到 → 照對照表的部門；找不到（例：共用帳號 tlcs、還沒補對照的同事）
-        // → 不再顯示「未分類」，改用「系統名稱」當部門（Michelle 2026-11-02：「歸屬在各系統就好，不用管是哪個帳號用的」）
-        department: org ? org.department : systemLabel,
+        // 部門：公司自建 AI 系統的用量一律依「系統名稱」（首頁卡片名稱）分類，不論對照表找不找得到人
+        // （Michelle 2026-11-02 決定；Excel 月報匯入的資料仍依部門分）。對照表只用來決定公司，不再決定部門。
+        department: systemLabel,
         token_amount: e.total_tokens || 0,
         source_label: systemLabel,
       });
