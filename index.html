@@ -451,7 +451,7 @@
         <details class="info-note"><summary>ⓘ 說明</summary><div>
           依上面選的日期區間。<b>tokens</b> 是各系統自己記錄的。<br>
           <b>DeepInfra 花費＝實際</b>（每天自動到 DeepInfra 抓餘額）。<b>Gemini 花費＝估算</b>：Google 沒有任何方式能自動抓 Gemini 餘額，
-          所以用「tokens × 官方單價 × 匯率 × 校正倍數」估算；每月填一次 Gemini 實際帳單（下方「每月 Gemini 實際帳單」），系統會自動算出校正倍數，估算會越來越接近帳單。
+          所以用「tokens × 官方單價 × 匯率 × 校正倍數」估算；不定期把 Gemini 後台的餘額（Credit balance）填到「儲值與帳單」分頁的「② 手動填實際餘額」，系統用相鄰兩次餘額算出實際花費，自動算出校正倍數，估算會越來越接近實際。
         </div></details>
         <div id="factor-info" style="padding:6px 20px 0;font-size:14px;"></div>
         <div class="table-scroll">
@@ -586,7 +586,7 @@
 
         <h3 style="margin:18px 20px 0;font-size:16px;">② 手動填實際餘額 <span style="font-weight:400;color:var(--muted);font-size:14px;">到 AI Studio 帳單頁看到 Gemini 剩多少，就填在這裡（DeepInfra 自動抓，不用填）</span></h3>
         <p class="import-note" style="padding:0 20px;margin-top:4px;">
-          Gemini：打開 <a href="https://aistudio.google.com/billing" target="_blank" rel="noopener">AI Studio 帳單頁（Billing）</a>，把畫面上的「剩餘餘額」抄進來。日期選今天，系統會記成「現在」的餘額。
+          Gemini：打開 <a href="https://aistudio.google.com/billing" target="_blank" rel="noopener">AI Studio 帳單頁（Billing）</a>，把畫面最上面的「Credit balance」抄進來。日期選今天，系統會記成「現在」的餘額。<b>Gemini 的校正倍數就靠這裡</b>：想到就填（建議每週或每月一次），不用整月、區間可以任意；有儲值請同時在 ① 新增儲值。系統會拿「前次餘額＋期間儲值−這次餘額」當實際花費，來校正估算。
         </p>
         <div class="credit-form admin-only" id="snap-form">
           <select id="snap-provider" onchange="syncCurrencyLabels()"><option value="gemini">Gemini（Google）</option><option value="deepinfra">DeepInfra</option></select>
@@ -611,28 +611,16 @@
       </section>
 
       <section class="panel">
-        <h2>③ 每月 Gemini 實際帳單（校正用）</h2>
-        <details style="padding:0 20px;font-size:14px;line-height:1.8;">
-          <summary style="cursor:pointer;color:var(--blue);">📖 帳單金額去哪裡看？（點這裡看步驟）</summary>
-          <ol style="margin:6px 0 0;padding-left:20px;">
-            <li>用瀏覽器打開 <a href="https://aistudio.google.com/" target="_blank" rel="noopener">aistudio.google.com</a>，用公司的 Google 帳號登入。</li>
-            <li>點左邊選單的「Dashboard」→「Usage」（或「Spend」），進到「Gemini API Spend」頁面。</li>
-            <li>上方日期區間選<b>上個月 1 日到最後一天</b>，<b>不要</b>選任何 Key。</li>
-            <li>把畫面上的「Your Total Cost」金額，填到下面的「帳單金額」，月份選上個月，按「儲存」。</li>
-          </ol>
-          <p style="margin:6px 0 0;color:var(--muted);">只要填總額一格就好，不用每把 Key 分開抄。這個總額也包含同事 Guard system 那把 Key 的花費。</p>
-        </details>
-        <div class="credit-form admin-only">
-          <label>月份：</label>
-          <input type="month" id="keyspend-month" />
-          <input type="number" id="bill-amount" placeholder="帳單金額" min="0" step="any" />
-          <span style="color:var(--muted);">幣別：<b id="keyspend-currency">—</b></span>
-          <button class="btn-mini" onclick="saveGeminiBill()">儲存</button>
-          <span id="keyspend-msg" style="font-size:14px;"></span>
-        </div>
+        <h2>③ Gemini 校正倍數明細</h2>
+        <details class="info-note"><summary>ⓘ 說明</summary><div>
+          每兩次「② 手動填的 Gemini 實際餘額」算一段：<b>實際花費＝前次餘額＋這段期間儲值−這次餘額</b>；<b>校正倍數＝實際花費 ÷ 同期間我們用官方單價估的金額</b>。
+          第一筆餘額只當起點。這段估算太小（不到 NT$3）會併進下一次一起算；實際花費算出來 ≤ 0（通常是漏登儲值）會標「請確認」，那一段不採用。<br>
+          Gemini 同一個專案裡同事 Guard system 的花費也在這個餘額裡，所以會被攤進各系統的倍數。<br>
+          舊的「每月 Gemini 實際帳單」不用再填（資料保留，只在還沒有兩筆餘額時當備援）。
+        </div></details>
         <div class="table-scroll">
           <table id="keyspend-table">
-            <thead><tr><th>月份</th><th class="num">估算（官方單價）</th><th class="num">實際帳單</th><th class="num">校正倍數</th><th>說明</th><th></th></tr></thead>
+            <thead><tr><th>期間</th><th class="num">起始餘額</th><th class="num">期間儲值</th><th class="num">結束餘額</th><th class="num">實際花費</th><th class="num">估算（官方單價）</th><th class="num">校正倍數</th><th>狀態</th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
@@ -1073,6 +1061,7 @@ function renderRecentTable() {
 // ══════════════════════════════════════════════════════════
 const CREDIT_ALERT_PCT = 70;          // 已用達這個百分比（剩 30%）→ 紅色提醒
 const GEMINI_STALE_DAYS = 30;         // Gemini 實際餘額超過這麼多天沒更新 → 黃色提醒
+const GEMINI_SNAP_STALE_DAYS = 35;    // Gemini 手動填的實際餘額超過這麼多天沒更新 → 黃色提醒（校正倍數靠它）
 const DEEPINFRA_STALE_DAYS = 3;       // DeepInfra 自動抓超過這麼多天沒成功 → 黃色提醒（代表排程或金鑰出問題）
 const TOTAL_KEY = '__TOTAL__';        // ai_monthly_spend 裡「不篩選 Key 的總計」
 
@@ -1083,9 +1072,11 @@ let monthlySpendRows = [];   // 目前日期區間涵蓋的月份的 ai_monthly_
 let currentFullMonths = null; // 目前區間如果剛好是「整個月」，這裡是 ['2026-09-01', ...]；否則 null
 let geminiDailyRows = [];     // ai_gemini_daily()：Gemini 每日估算花費與估算餘額
 let geminiBySystem = {};      // ai_gemini_by_system()：system_name → 估算花費
-let geminiFactors = [];       // ai_gemini_month_factors()：每月估算、實際帳單、校正倍數
+let geminiFactors = [];       // ai_gemini_month_factors()：每月估算、實際帳單、校正倍數（2026-11-09 起只當備援，倍數主要看 geminiSegments）
+let geminiSegments = [];      // ai_gemini_segments()：相鄰兩次實際餘額之間的實際花費與校正倍數（2026-11-09）
 
 function curOf(provider) { return (providerInfo[provider] && providerInfo[provider].currency) || 'USD'; }
+function fmtDateTime(d) { const x = new Date(d); return (x.getMonth() + 1) + '/' + x.getDate() + ' ' + String(x.getHours()).padStart(2, '0') + ':' + String(x.getMinutes()).padStart(2, '0'); }
 function fmtCur(n, currency) {
   if (n == null || isNaN(Number(n))) return '—';
   n = Number(n);
@@ -1118,14 +1109,16 @@ async function loadSpendTables(startISO, endISO) {
   const { startDate, endDate, months } = rangeDates(startISO, endISO);
   currentFullMonths = months;
   const monthFrom = startDate.slice(0, 8) + '01';
-  const [dailyRes, spendRes, gemDailyRes, gemSysRes, factorRes] = await Promise.all([
+  const [dailyRes, spendRes, gemDailyRes, gemSysRes, factorRes, segRes] = await Promise.all([
     sb.rpc('ai_daily_balance', { p_start: startDate, p_end: endDate }),
     sb.from('ai_monthly_spend').select('*').gte('month', monthFrom).lte('month', endDate),
     sb.rpc('ai_gemini_daily', { p_start: startDate, p_end: endDate }),
     sb.rpc('ai_gemini_by_system', { p_start: startISO, p_end: endISO }),
     sb.rpc('ai_gemini_month_factors'),
+    sb.rpc('ai_gemini_segments'),
   ]);
-  [dailyRes, spendRes, gemDailyRes, gemSysRes, factorRes].filter(r => r.error).forEach(r => console.error('讀取花費資料失敗:', r.error));
+  [dailyRes, spendRes, gemDailyRes, gemSysRes, factorRes, segRes].filter(r => r.error).forEach(r => console.error('讀取花費資料失敗:', r.error));
+  geminiSegments = segRes.error ? [] : (segRes.data || []);
   dailyRows = dailyRes.error ? [] : (dailyRes.data || []);
   monthlySpendRows = spendRes.error ? [] : (spendRes.data || []);
   geminiDailyRows = gemDailyRes.error ? [] : (gemDailyRes.data || []);
@@ -1138,17 +1131,21 @@ async function loadSpendTables(startISO, endISO) {
   renderUsageChart();
 }
 
-// 目前套用的校正倍數（最近一個月份那列的 applied_factor）
+// 目前套用的校正倍數：最新一段「相鄰兩次餘額」的倍數；還沒有兩筆餘額時，備援用舊的整月帳單倍數
 function currentFactor() {
+  const okSeg = geminiSegments.filter(s => s.status === 'ok' && s.factor != null);
+  if (okSeg.length) { const s = okSeg[okSeg.length - 1]; return { factor: Number(s.factor), from: s.seg_end, kind: 'balance' }; }
   const last = geminiFactors[geminiFactors.length - 1];
-  return last ? { factor: Number(last.applied_factor), from: last.factor_from } : { factor: 1, from: null };
+  return last ? { factor: Number(last.applied_factor), from: last.factor_from, kind: last.factor_from ? 'bill' : 'none' } : { factor: 1, from: null, kind: 'none' };
 }
 function monthLabelOf(d) { return d ? String(d).slice(0, 4) + '年' + Number(String(d).slice(5, 7)) + '月' : ''; }
 function renderFactorInfo() {
-  const { factor, from } = currentFactor();
-  document.getElementById('factor-info').innerHTML = from
-    ? `Gemini 目前校正倍數：<b>×${factor.toFixed(2)}</b>（依 ${monthLabelOf(from)}實際帳單 ÷ 估算）`
-    : '<span style="color:var(--amber);">Gemini 還沒有填過實際帳單，目前校正倍數 ×1（純照官方單價，可能偏低）。請到「儲值與帳單」分頁的「③ 每月 Gemini 實際帳單」填。</span>';
+  const { factor, from, kind } = currentFactor();
+  document.getElementById('factor-info').innerHTML = kind === 'balance'
+    ? `Gemini 目前校正倍數：<b>×${factor.toFixed(2)}</b>（依最近兩次後台餘額之間的實際花費 ÷ 估算，最新一次餘額 ${String(from).slice(0, 10)}）`
+    : kind === 'bill'
+    ? `Gemini 目前校正倍數：<b>×${factor.toFixed(2)}</b>（暫依 ${monthLabelOf(from)}實際帳單；到「儲值與帳單」分頁多填幾次 Gemini 後台餘額，就會改用餘額算）`
+    : '<span style="color:var(--amber);">Gemini 還沒有足夠的實際餘額紀錄，目前校正倍數 ×1（純照官方單價，可能偏低）。請到「儲值與帳單」分頁的「② 手動填實際餘額」填 Gemini 後台的餘額（至少兩筆）。</span>';
 }
 
 // 把共用同一把 Key 的系統併成一組（例：出貨管理系統、三廠接單出貨認列管理共用 SHIPPING）
@@ -1273,16 +1270,18 @@ function renderDailyTable(err) {
 // ---------- 最新餘額、提醒、儲值與餘額紀錄 ----------
 async function loadCreditStatus() {
   const today = localDateStr(new Date());
-  const [latestRes, topupRes, snapRes, gemTodayRes, factorRes] = await Promise.all([
+  const [latestRes, topupRes, snapRes, gemTodayRes, factorRes, segRes] = await Promise.all([
     sb.rpc('ai_latest_balance'),
     sb.from('ai_credit_topups').select('*').order('topup_date', { ascending: false }),
     sb.from('ai_balance_snapshots').select('*').order('taken_at', { ascending: false }).limit(60),
     sb.rpc('ai_gemini_daily', { p_start: today, p_end: today }),
     sb.rpc('ai_gemini_month_factors'),
+    sb.rpc('ai_gemini_segments'),
   ]);
-  [latestRes, topupRes, snapRes, gemTodayRes, factorRes].filter(r => r.error).forEach(r => console.error('讀取儲值/餘額失敗:', r.error));
+  [latestRes, topupRes, snapRes, gemTodayRes, factorRes, segRes].filter(r => r.error).forEach(r => console.error('讀取儲值/餘額失敗:', r.error));
   latestBalances = latestRes.error ? [] : (latestRes.data || []);
   geminiFactors = factorRes.error ? geminiFactors : (factorRes.data || []);
+  geminiSegments = segRes.error ? geminiSegments : (segRes.data || []);
   // Gemini 沒有辦法自動抓實際餘額 → 最新餘額改用「估算餘額」（今天那一列），已用比例也照估算算
   const gemToday = !gemTodayRes.error && gemTodayRes.data && gemTodayRes.data[0];
   latestBalances.forEach(b => {
@@ -1308,7 +1307,6 @@ function syncCurrencyLabels() {
   document.getElementById('cur-deepinfra').textContent = name(curOf('deepinfra'));
   document.getElementById('topup-currency-label').textContent = name(curOf(document.getElementById('topup-provider').value));
   document.getElementById('snap-currency-label').textContent = name(curOf(document.getElementById('snap-provider').value));
-  document.getElementById('keyspend-currency').textContent = name(curOf('gemini'));
 }
 
 function renderLatestTable(err) {
@@ -1345,14 +1343,12 @@ function renderBalanceAlerts() {
       yellow.push(`🟡 ${name} 的實際餘額${b.snap_at ? `已經 ${Math.floor(b.days_since_snap)} 天沒有自動更新` : '還沒有自動抓到過'}，請通知負責維護的人檢查（可在「儲值與帳單」分頁按「立即抓 DeepInfra 餘額」試試）`);
     }
   });
-  // Gemini：每月 6 日以後，上個月的實際帳單還沒填 → 黃色提醒（校正倍數要靠它）
-  const now = new Date();
-  if (now.getDate() >= 6) {
-    const prev = localDateStr(new Date(now.getFullYear(), now.getMonth() - 1, 1));
-    const pm = geminiFactors.find(f => String(f.month).slice(0, 10) === prev);
-    // 上個月幾乎沒用量（官方單價估算不到 NT$1）就不提醒：那種月份帳單接近 0，不能拿來算倍數，Michelle 被告知不用填
-    if (pm && pm.actual == null && Number(pm.raw_estimate) >= 1) yellow.push(`🟡 ${monthLabelOf(prev)}的 Gemini 實際帳單還沒填，請到 AI Studio 看帳單總額，填到「儲值與帳單」分頁的「③ 每月 Gemini 實際帳單」（估算才會準）`);
-  }
+  // Gemini：實際餘額超過 35 天沒填 → 黃色提醒（校正倍數要靠它；2026-11-09 取代原本「每月帳單沒填」的提醒）
+  latestBalances.forEach(b => {
+    if (b.provider === 'gemini' && b.snap_at != null && Number(b.days_since_snap) > GEMINI_SNAP_STALE_DAYS) {
+      yellow.push(`🟡 Gemini 的實際餘額已經 ${Math.floor(b.days_since_snap)} 天沒更新，請到 AI Studio 帳單頁看 Credit balance，填到「儲值與帳單」分頁的「② 手動填實際餘額」（估算才會準）`);
+    }
+  });
   const redEl = document.getElementById('credit-alert'), yEl = document.getElementById('credit-alert-yellow');
   redEl.innerHTML = red.join('<br>') + (red.length ? '<small>儲值後請到「儲值與帳單」分頁新增儲值紀錄，提醒就會更新。</small>' : '');
   redEl.style.display = red.length ? 'block' : 'none';
@@ -1451,6 +1447,7 @@ async function saveSnapshot() {
   if (error) return showFormError('snap-error', '實際餘額：儲存失敗 ' + error.message);
   ['snap-date', 'snap-amount', 'snap-note'].forEach(k => { document.getElementById(k).value = ''; });
   showFormError('snap-error', '');
+  monthSeriesCache = null;   // 倍數可能變了，依月份柱狀圖要重算
   refreshBalances();
 }
 
@@ -1463,6 +1460,7 @@ async function deleteBalanceRow(table, id) {
 
 // 儲值或餘額有變動：重新讀最新餘額、提醒，以及目前區間的兩張表
 function refreshBalances() {
+  monthSeriesCache = null;   // 餘額／儲值變了，倍數可能跟著變，依月份柱狀圖要重算
   loadCreditStatus();
   if (aiSystemsTabLoaded) loadData();
 }
@@ -1493,25 +1491,25 @@ async function fetchDeepinfraNow(dry) {
 function renderBillTable() {
   const tbody = document.querySelector('#keyspend-table tbody');
   if (!tbody) return;
-  const ks = document.getElementById('keyspend-month');
-  if (ks && !ks.value) { const d = new Date(); ks.value = localDateStr(new Date(d.getFullYear(), d.getMonth() - 1, 1)).slice(0, 7); }
-  const rows = geminiFactors.slice().reverse();
-  tbody.innerHTML = rows.length ? rows.map(f => {
-    const hasBill = f.actual != null;
-    const note = hasBill
-      ? (f.own_factor != null ? '用這個月自己的倍數' : '這個月沒有用量紀錄，無法算倍數')
-      : (f.factor_from ? `還沒填帳單，暫用 ${monthLabelOf(f.factor_from)}的倍數` : '還沒填帳單，倍數暫用 1');
+  const cur = curOf('gemini');
+  const stText = { ok: '採用', merged: '估算太小，併入下一次一起算', check: '⚠️ 請確認（餘額比預期高，可能漏登儲值）' };
+  const rows = geminiSegments.slice().reverse();
+  tbody.innerHTML = rows.length ? rows.map(s => {
+    const ok = s.status === 'ok';
     return `<tr>
-      <td>${monthLabelOf(f.month)}</td>
-      <td class="num">${fmtCur(f.raw_estimate, curOf('gemini'))}</td>
-      <td class="num">${hasBill ? fmtCur(f.actual, curOf('gemini')) : '<span style="color:var(--muted);">未填</span>'}</td>
-      <td class="num">×${Number(f.applied_factor).toFixed(2)}</td>
-      <td style="font-size:14px;color:var(--muted);">${note}</td>
-      <td class="admin-only">${hasBill ? `<button class="link-btn del" onclick="deleteGeminiBill('${String(f.month).slice(0, 10)}')">刪除</button>` : ''}</td>
+      <td style="white-space:nowrap;">${fmtDateTime(s.seg_start)} → ${fmtDateTime(s.seg_end)}</td>
+      <td class="num">${fmtCur(s.start_balance, cur)}</td>
+      <td class="num">${Number(s.topups) ? fmtCur(s.topups, cur) : '—'}</td>
+      <td class="num">${fmtCur(s.end_balance, cur)}</td>
+      <td class="num">${fmtCur(s.actual_spend, cur)}</td>
+      <td class="num">${fmtCur(s.raw_estimate, cur)}</td>
+      <td class="num">${ok ? '×' + Number(s.factor).toFixed(2) : '—'}</td>
+      <td style="font-size:14px;color:var(--muted);">${stText[s.status] || s.status}</td>
     </tr>`;
-  }).join('') : '<tr><td colspan="6" style="color:var(--muted);font-size:14px;">還沒有資料</td></tr>';
+  }).join('') : '<tr><td colspan="8" style="color:var(--muted);font-size:14px;">還沒有兩筆以上的 Gemini 實際餘額，倍數暫用舊的整月帳單倍數（沒有就 ×1）。請在 ② 填餘額。</td></tr>';
 }
 
+// 舊的「每月 Gemini 實際帳單」填寫功能（2026-11-09 起畫面已拿掉表單；函式保留，之後要還原可用）
 async function saveGeminiBill() {
   const monthVal = document.getElementById('keyspend-month').value;
   const raw = document.getElementById('bill-amount').value.trim();
@@ -1584,21 +1582,22 @@ async function loadMonthSeries() {
   const now = new Date();
   const months = [];
   for (let k = 5; k >= 0; k--) months.push(new Date(now.getFullYear(), now.getMonth() - k, 1));
-  const [diSpendRes, ...sums] = await Promise.all([
+  const [diSpendRes, gemEstRes, ...sums] = await Promise.all([
     sb.from('ai_monthly_spend').select('month, amount').eq('provider', 'deepinfra').eq('key_name', TOTAL_KEY),
+    sb.rpc('ai_gemini_month_est'),
     ...months.map(m => sb.rpc('ai_usage_summary', { p_start: m.toISOString(), p_end: new Date(m.getFullYear(), m.getMonth() + 1, 1).toISOString() })),
   ]);
+  const gemEst = {}; (gemEstRes.error ? [] : (gemEstRes.data || [])).forEach(r => { gemEst[String(r.month).slice(0, 7)] = Number(r.est_spend); });
   const diSpend = {}; (diSpendRes.data || []).forEach(r => { diSpend[String(r.month).slice(0, 7)] = Number(r.amount); });
   monthSeriesCache = months.map((m, idx) => {
     const key = localDateStr(m).slice(0, 7);
     const sp = (sums[idx].data && sums[idx].data.by_system_provider) || [];
     const tok = p => sp.filter(r => r.provider === p).reduce((sum, r) => sum + Number(r.tokens || 0), 0);
-    const f = geminiFactors.find(x => String(x.month).slice(0, 7) === key);
     return {
       label: m.getFullYear() + '/' + (m.getMonth() + 1),
       diTokens: tok('deepinfra'), gemTokens: tok('gemini'),
       diAmount: diSpend[key] != null ? diSpend[key] * USD_TO_TWD_FOR_CHART : 0,
-      gemAmount: f ? Number(f.raw_estimate) * Number(f.applied_factor) : 0,
+      gemAmount: gemEst[key] || 0,
     };
   });
   return monthSeriesCache;

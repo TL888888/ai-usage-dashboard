@@ -21,6 +21,7 @@
   - 校正倍數＝每月實際帳單 ÷ 官方單價估算（函式 `ai_gemini_month_factors()`）。帳單填在「儲值與帳單 → ③ 每月 Gemini 實際帳單」，存在 `ai_monthly_spend`（provider=gemini、key_name=`__TOTAL__`），**台幣**。
   - 2026-11-02 時倍數 ×1.11（依 10 月帳單）。帳單金額 0 不接受（倍數會變 0）。幾乎沒用量的月份不用填。
   - Gemini 剩餘：從儲值金額或最近一次手動填的實際餘額往下扣估算。
+  - **2026-11-09 改版（尚未上線，等 Michelle 貼 sql/2026-11-09_Gemini餘額校正.sql）**：校正倍數改用「相鄰兩次手動填的 Gemini 後台餘額」算（實際花費＝前次餘額＋期間儲值−這次餘額；倍數＝實際÷同期間官方單價估算）。「③ 每月帳單」表單拿掉，資料保留當備援。函式：ai_gemini_segments / ai_gemini_costed / ai_gemini_by_system / ai_gemini_month_est / ai_gemini_daily。
 - AI Studio 帳單幣別確認是**台幣**（2026-10-19 Credit balance NT$947、10 月帳單 53.34 對得上）。
 
 ## 集團各公司統計（2026-11-02 改）
