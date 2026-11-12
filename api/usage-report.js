@@ -20,8 +20,24 @@ const SOURCES = {
     api_key_name: 'Guard system',
     ai_provider: 'gemini',
   },
+  // 資材部兩個新軟體（2026-11-12 新增，各用自己的 Gemini key，由資材部開發者在呼叫 Gemini 後回報）
+  // 沒有 asker_email，所以「集團各公司統計」會歸到台灣大量，部門＝下面 index.html SYSTEM_LABELS 的名稱。
+  zicai_meeting: {
+    tokenEnv: 'ZICAI_MEETING_REPORT_TOKEN',
+    system_name: 'zicai_meeting',
+    api_key_name: '資材部-會議記錄',
+    ai_provider: 'gemini',
+  },
+  zicai_draw: {
+    tokenEnv: 'ZICAI_DRAW_REPORT_TOKEN',
+    system_name: 'zicai_draw',
+    api_key_name: '資材部-繪圖軟體',
+    ai_provider: 'gemini',
+  },
 };
-// 需要的 Vercel 環境變數：GUARD_REPORT_TOKEN、SUPABASE_SERVICE_ROLE_KEY（已有）
+// 需要的 Vercel 環境變數：GUARD_REPORT_TOKEN、ZICAI_MEETING_REPORT_TOKEN、ZICAI_DRAW_REPORT_TOKEN、SUPABASE_SERVICE_ROLE_KEY（已有）
+// 注意：繪圖軟體若用「圖片模型」，Google 可能按張數／圖片 tokens 計價，ai_model_prices 的單價表是文字 tokens 單價，會低估；
+// 這裡只照實記錄回報的 tokens，不在此估費用（見 NOTES.md）。
 
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';

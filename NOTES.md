@@ -31,6 +31,7 @@
 ## 其他
 - 系統名稱一律＝首頁卡片名稱（`SYSTEM_LABELS`，index.html）。光電／PCB 共用同一支程式回報（system_name=market），目前合併顯示。
 - Guard system（同事 janny0831 的掛號包裹登記，金鑰在同一個 Gemini 專案、同一張帳單）：目前表格固定一列「等待回報」。回報端點 `api/usage-report.js`（密語 `GUARD_REPORT_TOKEN`，只在 Vercel）已上線，給同事的說明在 `C:\Users\113059\Projects\掛號包裹登記\給同事_AI用量回報.md`（**尚未轉交**）。新方案見 TODO.md。
+- 資材部兩個新軟體（2026-11-12，各用自己的 Gemini key）：`api/usage-report.js` 的 SOURCES 有 zicai_meeting（會議記錄，環境變數 ZICAI_MEETING_REPORT_TOKEN）、zicai_draw（繪圖軟體，ZICAI_DRAW_REPORT_TOKEN）；畫面名稱在 index.html SYSTEM_LABELS。沒有提問人 email，「集團各公司統計」歸台灣大量、部門＝系統名稱。開發者說明：雲端系統總管查詢資材部Gemini用量回報_給開發者.md。**繪圖軟體若用圖片模型**：Google 可能按張數／圖片 tokens 計價，ai_model_prices 只有文字 tokens 單價（gemini-2.5-flash 系列，對不到的模型也會被當 2.5 Flash 估），會低估；目前只照實記錄 tokens，不另外估費，也要留意它會被攤進校正倍數。
 - 每月自動上傳 Excel：`api/auto-import.js`（AUTO_IMPORT_TOKEN），電腦排程每月 6 日 17:00。
 - SQL 都存在 `sql/`；要 Michelle 貼的 SQL 開頭一定要有專案檢查。
 - 修改前先列「會碰到的既有功能」，改完逐項實測；本機網頁在 Claude 的瀏覽器跑不了，只能上線後在正式站驗收（需要有人在 Claude 的瀏覽器登入，或在 Michelle 的 Chrome 開新分頁只看不改）。
