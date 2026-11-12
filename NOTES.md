@@ -1,37 +1,33 @@
 # 【AI用量統計】ai-usage-dashboard 注意事項（交接用）
 
-> 詳細的歷史紀錄、計算規則、每次改版的原因，都在 **`C:\Users\113059\Projects\AI用量統計\NOTES.md`**（同一個系統的另一個資料夾，放 Excel 資料、簡報原始碼）。
-> 本檔是給「接手的新對話／MIS」的總整理，2026-11-02 由舊對話（已超過 66 萬 tokens，依規則換新）寫下。
+> 兩個資料夾：本資料夾＝**程式碼 repo**（git，push main → Vercel 自動部署）；`C:\Users\113059\Projects\AI用量統計\`＝Excel、簡報原始碼、每月自動上傳腳本（無 git，其 NOTES 只講簡報／Excel／電腦端）。
+> 歷史流水帳在 `NOTES_歷史.md`、`TODO_歷史.md`（平常不讀）。2026-11-12 瘦身並把教訓拆進 `教訓\`。
 
 ## 系統是什麼
 - 網址：https://ai-usage-dashboard-sooty-five.vercel.app （tl-home.com 首頁卡片「AI用量統計」）
-- 原始碼：本資料夾（GitHub repo，push 到 main 會由 Vercel 自動部署）
-- 資料庫：Supabase **TL_projects**（bvuygyajzupeqpqfwmgi）
-- 登入：**沒有帳號密碼**。從 tl-home.com 首頁點卡片 → `api/tl-sso.js` 讀 TL_technology 人資系統 `members.ai_usage_role`（無權限／僅讀取 reader／管理員 admin）→ 免密碼登入。
-  資料庫只認 12 小時內跟人資確認過的人（`dashboard_admins.sso_verified_at`），所以人資取消權限最晚 12 小時失效。
-- **交接給 MIS**：人資系統把 MIS 的「AI用量統計」設成管理員、關掉 Michelle 的即可，不用改程式。另要移交 Vercel 環境變數、DeepInfra 帳號、Google AI Studio 帳單、每月填帳單的工作。
+- 資料庫：Supabase **TL_projects**（bvuygyajzupeqpqfwmgi）。SQL 都存 `sql/`；要 Michelle 貼的 SQL 開頭一定要有專案檢查。
+- 目的：總經理看集團各公司 AI 推動積極度（tokens）＋自家雲端系統用量與費用。
+- 分頁：總覽（兩張餘額大卡片＋柱狀圖）｜各系統用量｜儲值與帳單｜集團各公司統計｜經營會議簡報
+- 登入：免密碼，靠人資系統 `members.ai_usage_role`（`api/tl-sso.js`）。**交接 MIS**：人資系統把 MIS 設成管理員、關掉 Michelle 的，不用改程式；另移交 Vercel 環境變數、DeepInfra 帳號、Google AI Studio 帳單、定期填 Gemini 餘額的工作。
+- 費用概要：DeepInfra＝實際（每天 23 點自動抓，`api/deepinfra-snapshot.js`，美金）；Gemini＝估算（tokens×官方單價×匯率 32×校正倍數），Michelle 定期填後台餘額校正（台幣）。紅色提醒 ≥70%（`CREDIT_ALERT_PCT`）。
+- 自動上傳：`api/auto-import.js`＋`api/_parse.js`，電腦排程每月 6 日 17:00。回報端點：`api/usage-report.js`。
+- 簡報分頁 `deck.html` 由 AI用量統計 資料夾 `node src\build.cjs` 產生後複製過來。
 
-## 分頁（2026-10-19 改版）
-總覽（兩張餘額大卡片＋柱狀圖）｜各系統用量｜儲值與帳單｜集團各公司統計｜經營會議簡報
+## 工作守則
+- 修改前先列「會碰到的既有功能」，改完逐項實測（網頁、手機）；回報寫「既有功能檢查」。本機網頁在 Claude 瀏覽器跑不了，只能上線後在正式站驗收（Michelle 的 Chrome 開新分頁只看不改；瀏覽器可能暫存舊頁要重新載入）。
+- Michelle 說「本來正常、現在怪」→ 查 git／SQL 紀錄，白話說明是哪次改動造成。
 
-## 費用怎麼算（重要）
-- **DeepInfra＝實際**：`api/deepinfra-snapshot.js` 每天台灣 23 點左右（vercel.json 排程 UTC 15:00）自動抓 DeepInfra 實際餘額與每月花費。單位已實測是美金。
-- **Gemini＝估算**：tokens × 官方單價（表 `ai_model_prices`）× 匯率（`ai_provider_settings.usd_to_currency`，32）× **校正倍數**。
-  - Google 沒有任何 API 能查 Gemini 餘額，所以只能估算＋每月對帳。
-  - 校正倍數＝每月實際帳單 ÷ 官方單價估算（函式 `ai_gemini_month_factors()`）。帳單填在「儲值與帳單 → ③ 每月 Gemini 實際帳單」，存在 `ai_monthly_spend`（provider=gemini、key_name=`__TOTAL__`），**台幣**。
-  - 2026-11-02 時倍數 ×1.11（依 10 月帳單）。帳單金額 0 不接受（倍數會變 0）。幾乎沒用量的月份不用填。
-  - Gemini 剩餘：從儲值金額或最近一次手動填的實際餘額往下扣估算。
-  - **2026-11-09 改版（尚未上線，等 Michelle 貼 sql/2026-11-09_Gemini餘額校正.sql）**：校正倍數改用「相鄰兩次手動填的 Gemini 後台餘額」算（實際花費＝前次餘額＋期間儲值−這次餘額；倍數＝實際÷同期間官方單價估算）。「③ 每月帳單」表單拿掉，資料保留當備援。函式：ai_gemini_segments / ai_gemini_costed / ai_gemini_by_system / ai_gemini_month_est / ai_gemini_daily。
-- AI Studio 帳單幣別確認是**台幣**（2026-10-19 Credit balance NT$947、10 月帳單 53.34 對得上）。
-
-## 集團各公司統計（2026-11-02 改）
-- Excel 月報匯入的資料 → 照 Excel 上填的部門。
-- 公司自建 AI 系統的用量 → **一律依系統名稱（首頁卡片名稱，`SYSTEM_LABELS`）分類**；`org_directory` 只用來決定「算哪家公司」（找不到算台灣大量）。不再有「未分類」。
-
-## 其他
-- 系統名稱一律＝首頁卡片名稱（`SYSTEM_LABELS`，index.html）。光電／PCB 共用同一支程式回報（system_name=market），目前合併顯示。
-- Guard system（同事 janny0831 的掛號包裹登記，金鑰在同一個 Gemini 專案、同一張帳單）：目前表格固定一列「等待回報」。回報端點 `api/usage-report.js`（密語 `GUARD_REPORT_TOKEN`，只在 Vercel）已上線，給同事的說明在 `C:\Users\113059\Projects\掛號包裹登記\給同事_AI用量回報.md`（**尚未轉交**）。新方案見 TODO.md。
-- 資材部兩個新軟體（2026-11-12，各用自己的 Gemini key）：`api/usage-report.js` 的 SOURCES 有 zicai_meeting（會議記錄，環境變數 ZICAI_MEETING_REPORT_TOKEN）、zicai_draw（繪圖軟體，ZICAI_DRAW_REPORT_TOKEN）；畫面名稱在 index.html SYSTEM_LABELS。沒有提問人 email，「集團各公司統計」歸台灣大量、部門＝系統名稱。開發者說明：雲端系統總管查詢資材部Gemini用量回報_給開發者.md。**繪圖軟體若用圖片模型**：Google 可能按張數／圖片 tokens 計價，ai_model_prices 只有文字 tokens 單價（gemini-2.5-flash 系列，對不到的模型也會被當 2.5 Flash 估），會低估；目前只照實記錄 tokens，不另外估費，也要留意它會被攤進校正倍數。
-- 每月自動上傳 Excel：`api/auto-import.js`（AUTO_IMPORT_TOKEN），電腦排程每月 6 日 17:00。
-- SQL 都存在 `sql/`；要 Michelle 貼的 SQL 開頭一定要有專案檢查。
-- 修改前先列「會碰到的既有功能」，改完逐項實測；本機網頁在 Claude 的瀏覽器跑不了，只能上線後在正式站驗收（需要有人在 Claude 的瀏覽器登入，或在 Michelle 的 Chrome 開新分頁只看不改）。
+## 教訓索引（開機不讀；要做那類工作前，先讀對應檔，都在 `教訓\`）
+| 做什麼工作時 | 讀哪個檔 |
+|---|---|
+| 動 Gemini 費用／餘額／估算、解釋為何和帳單不符 | 費用_Gemini只能估算不可當實際花費.md |
+| 動 Gemini 校正倍數、儲值與帳單 ③、餘額填寫 | 費用_Gemini校正倍數_用餘額法算.md |
+| 動 DeepInfra 抓餘額、排程、金鑰 | 費用_DeepInfra自動抓餘額的單位與陷阱.md |
+| 寫任何加總／統計／網頁查詢 | 計算_加總一律在資料庫函式不可limit.md |
+| 動供應商、Key 名稱、系統名稱／卡片改名 | 供應商名稱_google與gemini要統一.md |
+| 動集團各公司統計、org_directory、部門歸屬 | 集團統計_自建系統一律依系統名稱分類.md |
+| 動 Excel 匯入、自動上傳、重傳月報 | Excel匯入_上傳舊檔會蓋掉新資料.md |
+| 改經營會議簡報／deck.html／pptx | 簡報_用詞原則與排版規則.md |
+| 動登入、權限、tlcs 帳號、交接 MIS | 登入_人資權限免密碼與12小時失效.md |
+| 加外部回報來源、處理 Guard／資材部 | 回報端點_新增外部來源與Guard資材部.md |
+| 做「每日金額上限集中」或動各系統上限 | 上限_各系統每日金額上限分散位置.md |
