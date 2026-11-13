@@ -391,7 +391,6 @@
     <div class="user-info">
       <span id="user-email-label"></span>
       <span class="role-badge" id="role-badge" title="權限由人資系統「AI用量統計」欄設定"></span>
-      <button onclick="doLogout()">登出</button>
       <a class="home-btn" href="https://tl-home.com/" title="回公司首頁"><span>🏠</span><span class="home-txt">首頁</span></a>
     </div>
   </header>
@@ -830,11 +829,6 @@ async function loginWithTlSso(tlToken) {
   } catch (e) {
     showSsoError('登入失敗：' + e.message);
   }
-}
-
-async function doLogout() {
-  await sb.auth.signOut();
-  window.location.href = TL_HOME_URL;
 }
 
 let aiSystemsTabLoaded = false; // 用量資料（總覽／各系統用量／儲值與帳單共用）是否已經載入過
